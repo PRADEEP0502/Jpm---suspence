@@ -4,7 +4,7 @@ An internal web application for tracking suspense amounts given to employees or 
 
 For every entry it shows **who** received the amount, **what** it was for, **how much**, **when**, its **age** (days pending) and its **status** (Open or Closed). Each entry has a permanent **SRN** (Suspense Reference Number: `SRN-001`, `SRN-002`, …).
 
-- **Anyone** on the office network can open the Dashboard (view only, no login).
+- **Anyone** on the office network can open the Dashboard, Closed History and Person Summary (view only, no login).
 - **Entry / Admin users** log in to **Add → Edit → Close** entries.
 
 ---
@@ -41,12 +41,13 @@ You will be asked to set a new password straight away. After that, open **Users*
 | | View user (no login) | Entry User | Administrator |
 |---|:-:|:-:|:-:|
 | Dashboard: totals, open entries, search, filters, person-wise and particular-wise summaries | ✓ | ✓ | ✓ |
+| Closed History and Person Summary pages (view only) | ✓ | ✓ | ✓ |
 | Manage Entries: **Add, Edit, Close** | | ✓ | ✓ |
-| Closed History, Person Summary pages | | ✓ | ✓ |
+| Change history of an entry | | ✓ | ✓ |
 | Reopen a closed entry, delete/restore an entry (reason required) | | | ✓ |
 | Users: create logins, reset passwords, deactivate | | | ✓ |
 
-**Menus:** view users see **Dashboard**. Entry users see **Dashboard · Manage Entries · Closed History · Person Summary** (administrators also see **Users**). **Logout** is at the top right.
+**Menus:** view users see **Dashboard · Closed History · Person Summary**. Entry users also see **Manage Entries**, and administrators also see **Users**. View users have no Add, Edit, Close or Delete buttons anywhere. **Logout** is at the top right.
 
 ## 4. Daily use (Manage Entries)
 

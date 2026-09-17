@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JPM Suspense Amount Dashboard</title>
+    <meta name="description" content="Track amounts given out that are pending settlement, and their closing history." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f3a5f'/%3E%3Ctext x='16' y='21' font-family='Segoe UI,Arial' font-size='11' font-weight='700' fill='white' text-anchor='middle'%3EJPM%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="css/app.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#app">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#/dashboard">
+          <span class="brand-mark" aria-hidden="true">JPM</span>
+          <span class="brand-text">
+            <span class="brand-title">JPM Suspense Amount Dashboard</span>
+            <span class="brand-sub">As of <span id="asOf"></span></span>
+          </span>
+        </a>
+        <div class="user-area" id="userArea"></div>
+      </div>
+    </header>
+    <nav class="nav" id="nav" aria-label="Main"></nav>
+    <main id="app" class="container" tabindex="-1"><div class="empty empty--tall">Loading…</div></main>
+    <div id="modalRoot"></div>
+    <div id="toastRoot" class="toasts" aria-live="polite"></div>
+    <noscript><p class="container">This application needs JavaScript enabled in the browser.</p></noscript>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
