@@ -4,7 +4,7 @@ An internal web application for tracking suspense amounts given to employees or 
 
 For every entry it shows **who** received the amount, **what** it was for, **how much**, **when**, its **age** (days pending) and its **status** (Open or Closed). Each entry has a permanent **SRN** (Suspense Reference Number: `SRN-001`, `SRN-002`, …).
 
-- **Anyone** on the office network can open the Dashboard, Closed History and Person Summary (view only, no login).
+- **Anyone** on the office network can open the Dashboard, All Suspense, Closed History and Person Summary (view only, no login).
 - **Entry / Admin users** log in to **Add → Edit → Close** entries.
 
 ---
@@ -41,13 +41,13 @@ You will be asked to set a new password straight away. After that, open **Users*
 | | View user (no login) | Entry User | Administrator |
 |---|:-:|:-:|:-:|
 | Dashboard: totals, open entries, search, filters, person-wise and particular-wise summaries | ✓ | ✓ | ✓ |
-| Closed History and Person Summary pages (view only) | ✓ | ✓ | ✓ |
+| All Suspense, Closed History and Person Summary pages (view only) | ✓ | ✓ | ✓ |
 | Manage Entries: **Add, Edit, Close** | | ✓ | ✓ |
 | Change history of an entry | | ✓ | ✓ |
 | Reopen a closed entry, delete/restore an entry (reason required) | | | ✓ |
 | Users: create logins, reset passwords, deactivate | | | ✓ |
 
-**Menus:** view users see **Dashboard · Closed History · Person Summary**. Entry users also see **Manage Entries**, and administrators also see **Users**. View users have no Add, Edit, Close or Delete buttons anywhere. **Logout** is at the top right.
+**Menus:** view users see **Dashboard · All Suspense · Closed History · Person Summary**. Entry users also see **Manage Entries**, and administrators also see **Users**. View users have no Add, Edit, Close or Delete buttons anywhere. **Logout** is at the top right.
 
 ## 4. Daily use (Manage Entries)
 
@@ -60,11 +60,20 @@ In the table, open entries show **Edit** and **Close**; closed entries show **Vi
 ## 5. Search and filters
 
 - **One search box** finds an SRN, a name (Whom) or particulars. Typing `SRN-001` (or `srn 1`) shows exactly that record; `Ashok` shows all of Ashok's entries; `Stationery` shows all stationery-related entries.
-- **All / Open / Closed** switches which entries are listed.
+- **All / Open / Closed** switches which entries are listed. The **All Suspense** page lists every entry (open and closed, newest first) with its open and closed totals.
 - **Filters** narrow the list further by **Whom**, **Date** (from/to), **Age** group and **Amount** (from/to).
 - On the Dashboard, clicking a name in the **Person-wise Summary** lists that person's entries, and clicking an **Aging Summary** group lists the open entries in that age range.
 
-## 6. How the figures are calculated
+## 6. On phones and tablets
+
+The same pages work on any device; the layout adapts to the screen:
+
+- **Wide screens** show the full table.
+- **Phones and narrow screens** show one card per entry (SRN and status, then whom, amount, particulars, date and age), because a wide table would otherwise be cut off. A **Sort** box replaces the sortable column headings.
+- Summary cards and aging groups become full-width rows on phones, the menu shows every page instead of scrolling sideways, and dialogs open as full-screen sheets with the buttons within thumb reach.
+- Printing always uses the full table, whatever the screen size.
+
+## 7. How the figures are calculated
 
 Every figure is calculated from the database each time the page loads. Nothing is hardcoded.
 
@@ -88,7 +97,7 @@ Every figure is calculated from the database each time the page loads. Nothing i
 | 31–60 | Critical |
 | more than 60 | Very Critical |
 
-## 7. Data safety and audit
+## 8. Data safety and audit
 
 - **Closed entries are never removed.** They stay in Closed History permanently.
 - Each entry stores **SRN, Created Date, Created By, Updated Date, Updated By, Closed Date, Closed By and Closing Remark**, plus a change history recording every add, edit and close, with who did it and when.
@@ -99,7 +108,7 @@ Every figure is calculated from the database each time the page loads. Nothing i
 **Where data is stored:** `data/suspense.sqlite` (a single database file).
 **Backups:** a copy is saved automatically once a day in `data/backups/` (the last 30 days are kept). To back up manually, copy the `data` folder. To restore, stop the server and replace `data/suspense.sqlite` with a backup copy.
 
-## 8. Common tasks
+## 9. Common tasks
 
 **Forgot the administrator password.** Stop the server, then run:
 
@@ -118,7 +127,7 @@ npm start
 
 This also resets logins back to `admin` / `Admin@123`, and numbering starts again at SRN-001.
 
-## 9. Settings (optional)
+## 10. Settings (optional)
 
 Set these as environment variables before starting the server:
 

@@ -106,7 +106,9 @@ export function agingTiles(aging) {
   const openTotal = aging.reduce((s, a) => s + a.amountPaise, 0);
   return html`<div class="aging">
     ${aging.map((a) => {
-      const pct = openTotal ? Math.round((a.amountPaise / openTotal) * 100) : 0;
+      const exact = openTotal ? (a.amountPaise / openTotal) * 100 : 0;
+      const pct = Math.round(exact);
+      const pctLabel = a.amountPaise && pct === 0 ? '<1' : String(pct);
       return html`<button
         type="button"
         class="aging-tile aging-tile--${a.level} ${a.count ? '' : 'is-empty'}"
@@ -117,8 +119,8 @@ export function agingTiles(aging) {
         <span class="level level--${a.level}"><span class="age-dot" aria-hidden="true"></span>${a.levelLabel}</span>
         <span class="aging-amount">${fmtMoney(a.amountPaise)}</span>
         <span class="aging-count">${plural(a.count, 'entry', 'entries')}</span>
-        <span class="meter" aria-hidden="true"><span style="width:${pct}%"></span></span>
-        <span class="aging-share">${pct}% of open amount</span>
+        <span class="meter" aria-hidden="true"><span style="width:${a.amountPaise ? Math.max(exact, 1) : 0}%"></span></span>
+        <span class="aging-share">${pctLabel}% of open amount</span>
       </button>`;
     })}
   </div>`;

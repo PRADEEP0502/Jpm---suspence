@@ -40,6 +40,55 @@ const COLUMNS = {
   actions: { label: 'Action', cls: 'actions', cell: (e) => rowActions(e) },
 };
 
+// Wording for the Sort dropdown shown with the card layout (phones / narrow screens).
+const SORT_WORDS = {
+  srn: { desc: 'newest first', asc: 'oldest first' },
+  age: { desc: 'oldest first', asc: 'newest first' },
+  daysPending: { desc: 'longest first', asc: 'shortest first' },
+  amount: { desc: 'high to low', asc: 'low to high' },
+  entryDate: { desc: 'latest first', asc: 'earliest first' },
+  originalDate: { desc: 'latest first', asc: 'earliest first' },
+  closedDate: { desc: 'latest first', asc: 'earliest first' },
+  deleted: { desc: 'latest first', asc: 'earliest first' },
+};
+const TEXT_SORT_WORDS = { asc: 'A to Z', desc: 'Z to A' };
+
+// Below this width entries are always shown as cards; above it, cards are used only if the table doesn't fit.
+const CARD_BREAKPOINT = 760;
+
+/** Card version of a table row: who / what / amount / date / age / status at a glance. */
+function entryCard(e, keys) {
+  const closed = e.status === 'CLOSED';
+  return html`<article class="entry-card ${closed ? 'is-closed' : ''}" data-id="${e.id}" tabindex="0">
+    <div class="ec-row">
+      <span class="srn">${e.srn}</span>
+      ${statusBadge(e)}
+    </div>
+    <div class="ec-row ec-row--main">
+      <div class="ec-who">
+        ${keys.includes('whom') ? html`<div class="whom">${e.whom}</div>` : ''}
+        <div class="ec-what">${e.particulars}</div>
+      </div>
+      <div class="ec-amount">${fmtMoney(e.amountPaise)}</div>
+    </div>
+    <div class="ec-row ec-row--meta">
+      <span>Given ${fmtDate(e.entryDate)}</span>
+      ${ageBadge(e)}
+    </div>
+    ${closed
+      ? html`<div class="ec-note">
+          Closed ${fmtDate(e.closedDate)}${e.closedBy ? ` by ${e.closedBy}` : ''}${e.closingRemark
+            ? ` · ${e.closingRemark}`
+            : ''}
+        </div>`
+      : ''}
+    ${e.isDeleted
+      ? html`<div class="ec-note">Deleted ${fmtDateTime(e.deletedAt)} by ${e.deletedBy}: ${e.deleteReason}</div>`
+      : ''}
+    ${keys.includes('actions') ? html`<div class="ec-actions">${rowActions(e)}</div>` : ''}
+  </article>`;
+}
+
 function rowActions(e) {
   if (e.isDeleted) {
     return isAdmin() ? html`<button type="button" class="btn btn--sm" data-row-act="restore">Restore</button>` : '';
@@ -146,6 +195,10 @@ export function mountEntryList(container, config) {
         <button type="button" class="btn" data-role="toggle-filters" aria-expanded="false">
           Filters<span class="filter-count" data-role="filter-count"></span>
         </button>
+        <div class="sort-mobile">
+          <label for="${cfg.id}-sort">Sort</label>
+          <select id="${cfg.id}-sort" data-role="sort"></select>
+        </div>
         <button type="button" class="btn btn--link" data-role="clear" hidden>Clear filters</button>
       </div>
 
@@ -280,7 +333,13 @@ export function mountEntryList(container, config) {
     const sort = st.sort || defaultSort();
     const filtered = st.q || FILTER_KEYS.some((k) => st[k]);
 
-    el('sub').textContent = `${plural(totals.count, 'entry', 'entries')} · ${fmtMoney(totals.amountPaise)}${
+    let breakdown = '';
+    if (st.status === 'ALL' && rows.length) {
+      const sumOf = (status) => rows.filter((e) => e.status === status).reduce((s, e) => s + e.amountPaise, 0);
+      const countOf = (status) => rows.filter((e) => e.status === status).length;
+      breakdown = ` · Open ${fmtMoney(sumOf('OPEN'))} (${countOf('OPEN')}) · Closed ${fmtMoney(sumOf('CLOSED'))} (${countOf('CLOSED')})`;
+    }
+    el('sub').textContent = `${plural(totals.count, 'entry', 'entries')} · ${fmtMoney(totals.amountPaise)}${breakdown}${
       filtered ? ' (filtered)' : ''
     }`;
 
@@ -298,6 +357,21 @@ export function mountEntryList(container, config) {
       el('foot').textContent = '';
       return;
     }
+
+    const sorted = sortedRows();
+    const sortable = keys.filter((key) => COLUMNS[key].sort);
+    setHtml(
+      el('sort'),
+      sortable.flatMap((key) =>
+        ['desc', 'asc'].map((dir) => {
+          const words = (SORT_WORDS[key] || TEXT_SORT_WORDS)[dir];
+          const value = `${key}:${dir}`;
+          return html`<option value="${value}" ${sort.key === key && sort.dir === dir ? html`selected` : ''}>
+            ${COLUMNS[key].label} (${words})
+          </option>`;
+        })
+      )
+    );
 
     setHtml(
       el('table'),
@@ -322,7 +396,7 @@ export function mountEntryList(container, config) {
             </tr>
           </thead>
           <tbody>
-            ${sortedRows().map(
+            ${sorted.map(
               (e) => html`<tr class="is-clickable ${e.status === 'CLOSED' ? 'is-closed' : ''}" data-id="${e.id}" tabindex="0">
                 ${keys.map(
                   (key) =>
@@ -332,12 +406,33 @@ export function mountEntryList(container, config) {
             )}
           </tbody>
         </table>
-      </div>`
+      </div>
+      <div class="entry-cards">${sorted.map((e) => entryCard(e, keys))}</div>`
     );
     el('foot').textContent = `Showing ${plural(totals.count, 'entry', 'entries')} · Total ${fmtMoney(
       totals.amountPaise
-    )} · Click a row to see full details`;
+    )} · Tap or click an entry to see full details`;
+    fitLayout();
   }
+
+  /** Use the table when it fits; otherwise (phones, narrow tablets, very wide tables) show cards. */
+  function fitLayout() {
+    const panel = $('.entry-list', container);
+    if (!panel) return;
+    panel.classList.remove('is-cards');
+    const wrap = $('.table-wrap', container);
+    const tooNarrow = window.innerWidth <= CARD_BREAKPOINT;
+    if (tooNarrow || (wrap && wrap.scrollWidth > wrap.clientWidth + 1)) panel.classList.add('is-cards');
+  }
+
+  const onResize = debounce(() => {
+    if (!document.contains(container)) {
+      window.removeEventListener('resize', onResize);
+      return;
+    }
+    fitLayout();
+  }, 150);
+  window.addEventListener('resize', onResize);
 
   // ------------------------------------------------------------ events
   const reloadDebounced = debounce(reload, 250);
@@ -351,6 +446,12 @@ export function mountEntryList(container, config) {
   });
 
   container.addEventListener('change', (ev) => {
+    if (ev.target.dataset.role === 'sort') {
+      const [key, dir] = ev.target.value.split(':');
+      st.sort = { key, dir };
+      renderTable();
+      return;
+    }
     const f = ev.target.dataset.f;
     if (!f) return;
     st[f] = ev.target.value;
@@ -398,7 +499,7 @@ export function mountEntryList(container, config) {
       return;
     }
 
-    const row = t.closest('tr[data-id]');
+    const row = t.closest('tr[data-id], .entry-card[data-id]');
     if (!row) return;
     const entry = rows.find((r) => String(r.id) === row.dataset.id);
     if (!entry) return;
@@ -418,7 +519,7 @@ export function mountEntryList(container, config) {
   });
 
   container.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Enter' || ev.target.tagName !== 'TR') return;
+    if (ev.key !== 'Enter' || !ev.target.matches('tr[data-id], .entry-card[data-id]')) return;
     const entry = rows.find((r) => String(r.id) === ev.target.dataset.id);
     if (entry) showEntryDetail(entry);
   });

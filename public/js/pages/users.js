@@ -57,10 +57,12 @@ export function render(main) {
                 <td data-label="Login ID"><span class="mono">${u.username}</span></td>
                 <td data-label="Role">${roleLabel(u.role)}</td>
                 <td data-label="Status">
-                  ${u.isActive
-                    ? html`<span class="badge badge--closed">Active</span>`
-                    : html`<span class="badge badge--deleted">Inactive</span>`}
-                  ${u.mustChangePassword ? html`<div class="cell-sub">Must set new password at next login</div>` : ''}
+                  <div>
+                    ${u.isActive
+                      ? html`<span class="badge badge--closed">Active</span>`
+                      : html`<span class="badge badge--deleted">Inactive</span>`}
+                    ${u.mustChangePassword ? html`<div class="cell-sub">Must set new password at next login</div>` : ''}
+                  </div>
                 </td>
                 <td data-label="Created">${fmtDateTime(u.createdAt)}</td>
                 <td class="actions" data-label="Actions">

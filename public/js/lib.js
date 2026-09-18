@@ -181,7 +181,7 @@ export function openModal({ title, size = 'md', dismissible = true }) {
   backdrop.className = 'modal-backdrop';
   setHtml(
     backdrop,
-    html`<div class="modal modal--${size}" role="dialog" aria-modal="true" aria-labelledby="${id}">
+    html`<div class="modal modal--${size}" role="dialog" aria-modal="true" aria-labelledby="${id}" tabindex="-1">
       <div class="modal-header">
         <h2 class="modal-title" id="${id}">${title}</h2>
         ${dismissible ? html`<button type="button" class="icon-btn" data-close aria-label="Close">&times;</button>` : ''}
@@ -223,7 +223,8 @@ export function openModal({ title, size = 'md', dismissible = true }) {
   openModals.push(handle);
   requestAnimationFrame(() => {
     const first = handle.body.querySelector('input:not([type=hidden]):not([readonly]), select, textarea');
-    (first || handle.el.querySelector('button') || handle.el).focus();
+    // Focus the first field; for read-only dialogs focus the dialog itself (no stray focus ring on a button).
+    (first || handle.el).focus();
   });
   return handle;
 }

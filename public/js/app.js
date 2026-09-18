@@ -4,6 +4,7 @@ import { html, setHtml, $, api, toast, onUnauthorized, isModalOpen, closeAllModa
 import { state, isLoggedIn, isAdmin, roleLabel, setViewRefresher, setToday } from './state.js';
 import { showChangePassword } from './dialogs.js';
 import * as dashboardPage from './pages/dashboard.js';
+import * as allPage from './pages/all.js';
 import * as closedPage from './pages/closed.js';
 import * as personsPage from './pages/persons.js';
 import * as managePage from './pages/manage.js';
@@ -12,10 +13,11 @@ import * as loginPage from './pages/login.js';
 
 const AUTO_REFRESH_MS = 60 * 1000;
 
-// Viewers (no login) get the view-only pages: Dashboard, Closed History, Person Summary.
+// Viewers (no login) get the view-only pages: Dashboard, All Suspense, Closed History, Person Summary.
 // Manage Entries and Users need an Entry/Admin login.
 const ROUTES = {
   dashboard: { page: dashboardPage, title: 'JPM Suspense Amount Dashboard' },
+  all: { page: allPage, title: 'All Suspense' },
   manage: { page: managePage, title: 'Manage Entries', needsLogin: true },
   closed: { page: closedPage, title: 'Closed History' },
   persons: { page: personsPage, title: 'Person Summary' },
@@ -51,7 +53,9 @@ function renderHeader() {
             <span class="user-name">${u.displayName}</span>
             <span class="user-role">${roleLabel(u.role)}</span>
           </div>
-          <button type="button" class="btn btn--topbar" data-act="change-password">Change Password</button>
+          <button type="button" class="btn btn--topbar" data-act="change-password">
+            <span class="hide-xs">Change </span>Password
+          </button>
           <button type="button" class="btn btn--topbar" data-act="logout">Logout</button>`
       : html`<span class="user-role user-role--view">View only</span>
           <a class="btn btn--topbar" href="#/login">Entry / Admin Login</a>`
@@ -59,6 +63,7 @@ function renderHeader() {
 
   const items = [
     ['dashboard', 'Dashboard'],
+    ['all', 'All Suspense'],
     ...(isLoggedIn() ? [['manage', 'Manage Entries']] : []),
     ['closed', 'Closed History'],
     ['persons', 'Person Summary'],

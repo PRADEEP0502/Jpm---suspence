@@ -388,14 +388,14 @@ textarea {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 14px 16px 13px;
-  border-top: 3px solid var(--border-strong);
+  border-top: 3px solid var(--card-accent, var(--border-strong));
   min-width: 0;
 }
 .card--open {
-  border-top-color: var(--primary);
+  --card-accent: var(--primary);
 }
 .card--closed {
-  border-top-color: #3f8f5a;
+  --card-accent: #3f8f5a;
 }
 .card-label {
   font-size: 12px;
@@ -670,6 +670,9 @@ textarea {
 .data-table--compact td {
   padding: 8px 14px;
 }
+.data-table--compact thead th {
+  white-space: normal;
+}
 .data-table .num {
   text-align: right;
   white-space: nowrap;
@@ -779,6 +782,7 @@ textarea {
 /* ------------------------------------------------------------------ Badges */
 
 .badge {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   padding: 2px 9px;
@@ -887,7 +891,7 @@ textarea {
   gap: 2px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-top: 3px solid var(--lvl-normal-dot);
+  border-top: 3px solid var(--lvl-color, var(--lvl-normal-dot));
   border-radius: var(--radius);
   background: var(--surface);
   text-align: left;
@@ -898,16 +902,16 @@ textarea {
   background: var(--surface-2);
 }
 .aging-tile--attention {
-  border-top-color: var(--lvl-attention-dot);
+  --lvl-color: var(--lvl-attention-dot);
 }
 .aging-tile--warning {
-  border-top-color: var(--lvl-warning-dot);
+  --lvl-color: var(--lvl-warning-dot);
 }
 .aging-tile--critical {
-  border-top-color: var(--lvl-critical-dot);
+  --lvl-color: var(--lvl-critical-dot);
 }
 .aging-tile--very-critical {
-  border-top-color: var(--lvl-vcritical-bg);
+  --lvl-color: var(--lvl-vcritical-bg);
 }
 .aging-tile.is-empty .aging-amount,
 .aging-tile.is-empty .aging-count {
@@ -958,7 +962,7 @@ textarea {
 
 .person-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 5fr) minmax(0, 7fr);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 8fr);
   gap: 20px;
   align-items: start;
 }
@@ -969,6 +973,11 @@ textarea {
 .person-layout > .panel .table-wrap {
   max-height: calc(100vh - 260px);
   overflow-y: auto;
+}
+.person-layout > .panel .data-table--compact th,
+.person-layout > .panel .data-table--compact td {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 /* ------------------------------------------------------------------ Forms */
@@ -1136,6 +1145,9 @@ textarea {
   background: var(--surface);
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
+}
+.modal:focus {
+  outline: none;
 }
 .modal--sm {
   max-width: 440px;
@@ -1372,19 +1384,146 @@ textarea {
   border-left-color: #f06a5f;
 }
 
+/* ------------------------------------------------------------------ Entry cards (narrow screens) */
+
+/* The entries list renders both a table and cards; .is-cards (set by JS when the table
+   does not fit) decides which one is visible. */
+.entry-cards,
+.sort-mobile {
+  display: none;
+}
+.entry-list.is-cards .table-wrap {
+  display: none;
+}
+.entry-list.is-cards .entry-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-2);
+}
+.entry-list.is-cards .sort-mobile {
+  display: flex;
+}
+.sort-mobile {
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.sort-mobile select {
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  max-width: 220px;
+}
+
+.entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.entry-card:hover {
+  border-color: var(--border-strong);
+}
+.entry-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.ec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.ec-row--main {
+  align-items: flex-start;
+}
+.ec-who {
+  min-width: 0;
+}
+.ec-who .whom {
+  display: block;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.ec-what {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.ec-amount {
+  flex: none;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.entry-card.is-closed .ec-amount {
+  color: var(--text-2);
+}
+.ec-row--meta {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.ec-note {
+  padding-top: 6px;
+  border-top: 1px dashed var(--row-border);
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.ec-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+.ec-actions:empty {
+  display: none;
+}
+.ec-actions .btn {
+  flex: 1;
+}
+
 /* ------------------------------------------------------------------ Responsive */
 
-@media (max-width: 1200px) {
-  .cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Laptops / landscape tablets: tighter tables so more columns fit. */
+@media (max-width: 1280px) {
+  .data-table th,
+  .data-table td {
+    padding: 9px 10px;
   }
-  .aging {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .data-table thead th {
+    white-space: normal;
+  }
+  .th-sort {
+    text-align: left;
   }
 }
 
-@media (max-width: 960px) {
-  .grid-2,
+/* Five summary cards / aging tiles: 3 on the first row, 2 wider ones on the second. */
+@media (max-width: 1200px) {
+  .cards:not(.cards--compact),
+  .aging {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .cards:not(.cards--compact) > .card,
+  .aging > .aging-tile {
+    grid-column: span 2;
+  }
+  .cards:not(.cards--compact) > .card:nth-child(n + 4),
+  .aging > .aging-tile:nth-child(n + 4) {
+    grid-column: span 3;
+  }
   .person-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1393,6 +1532,12 @@ textarea {
   }
   .person-layout > .panel .table-wrap {
     max-height: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .grid-2 {
+    grid-template-columns: minmax(0, 1fr);
   }
   .cards--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1403,48 +1548,205 @@ textarea {
   }
 }
 
+/* Touch screens: finger-sized controls, and 16px inputs so iPhones don't zoom in. */
+@media (max-width: 820px), (pointer: coarse) {
+  .btn {
+    height: auto;
+    min-height: 40px;
+  }
+  .btn--sm {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+  .btn--lg {
+    min-height: 44px;
+  }
+  .seg button {
+    height: 40px;
+  }
+  .search input,
+  .sort-mobile select {
+    height: 40px;
+    font-size: 16px;
+  }
+  .field input[type='text'],
+  .field input[type='password'],
+  .field input[type='date'],
+  .field input[type='search'],
+  .field select,
+  .field textarea {
+    min-height: 42px;
+    font-size: 16px;
+  }
+  .chip {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 13.5px;
+  }
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .th-sort {
+    min-height: 36px;
+    padding-block: 9px;
+  }
+}
+
+/* Phones and small tablets */
 @media (max-width: 720px) {
   .container {
-    padding: 16px 16px 48px;
+    padding: 14px 12px 40px;
   }
-  .topbar-inner,
-  .nav-inner {
-    padding-left: 16px;
-    padding-right: 16px;
+
+  /* Header: brand on the first row, user actions on the second. */
+  .topbar-inner {
+    padding: 10px 12px;
+    gap: 8px 12px;
+  }
+  .brand {
+    gap: 10px;
+  }
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
   }
   .brand-title {
     font-size: 15px;
+    line-height: 1.25;
+  }
+  .user-area {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 6px;
   }
   .user-chip {
+    margin-right: auto;
     align-items: flex-start;
   }
-  .cards,
-  .aging {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .user-role--view {
+    margin-right: auto;
   }
-  .card-value {
-    font-size: 21px;
+  .btn--topbar {
+    min-height: 38px;
+    padding: 0 12px;
+  }
+
+  /* Menu: all tabs visible as a grid of buttons instead of a hidden side-scroll. */
+  .nav {
+    position: static;
+  }
+  .nav-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    overflow: visible;
+  }
+  .nav-link {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13.5px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.2;
+  }
+  .nav-link.is-active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+  }
+
+  .page-head {
+    margin-bottom: 14px;
+  }
+  .page-title {
+    font-size: 20px;
   }
   .page-actions,
   .page-actions .btn {
     width: 100%;
   }
+
+  .panel {
+    margin-bottom: 14px;
+  }
+  .panel-head {
+    padding: 12px 14px;
+  }
+  .panel-actions .btn {
+    min-height: 36px;
+  }
+  .panel-body {
+    padding: 12px;
+  }
+  .toolbar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
   .search {
     max-width: none;
     flex-basis: 100%;
   }
+  .seg {
+    flex: 1 1 100%;
+  }
+  .seg button {
+    flex: 1;
+    padding: 0 8px;
+  }
+  .sort-mobile {
+    flex: 1;
+    min-width: 0;
+  }
+  .sort-mobile select {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+  }
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+  .table-foot {
+    padding: 10px 12px;
+  }
+  .entry-list.is-cards .entry-cards {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .cards,
+  .aging {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .card-value {
+    font-size: 21px;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }
   .detail-head {
     flex-direction: column;
+    gap: 6px;
   }
   .detail-amount-wrap {
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     text-align: left;
   }
 
-  /* Entry tables become stacked cards: label on the left, value on the right. */
+  /* Generic tables (users): one card per row, label on the left, value on the right. */
   .data-table thead {
     display: none;
   }
@@ -1470,7 +1772,7 @@ textarea {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 5px 16px;
+    padding: 5px 14px;
     border: 0;
     text-align: right;
   }
@@ -1487,40 +1789,253 @@ textarea {
   }
   .data-table .num,
   .data-table .actions {
-    text-align: right;
     width: 100%;
+    text-align: right;
   }
   .data-table .actions {
     justify-content: flex-end;
+    gap: 8px;
   }
   .data-table .actions::before {
     content: none;
   }
+  .data-table .actions .btn + .btn {
+    margin-left: 0;
+  }
   .data-table tfoot tr {
     border-top: 1px solid var(--border);
   }
+
+  /* Summary tables (person-wise, particular-wise, persons list): name, then the three amounts side by side. */
+  .data-table--compact tbody tr,
+  .data-table--compact tfoot tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 10px;
+    padding: 10px 14px;
+  }
+  .data-table--compact td,
+  .data-table--compact tfoot th {
+    display: block;
+    padding: 0;
+    text-align: left;
+  }
+  .data-table--compact td:first-child,
+  .data-table--compact tfoot th {
+    grid-column: 1 / -1;
+  }
+  .data-table--compact td:first-child::before {
+    content: none;
+  }
+  .data-table--compact td::before {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .data-table--compact .num {
+    text-align: left;
+    white-space: nowrap;
+  }
+  .data-table--compact tfoot td,
+  .data-table--compact tfoot th {
+    background: transparent;
+  }
+  .data-table--compact tfoot tr {
+    background: var(--surface-2);
+  }
+  .data-table tr.is-selected {
+    background: var(--primary-soft);
+  }
+  .data-table tr.is-selected td {
+    background: transparent;
+  }
+
+  /* Dialogs become full-screen sheets with the buttons pinned to the bottom. */
+  .modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+  .modal,
+  .modal--sm,
+  .modal--lg {
+    display: flex;
+    flex-direction: column;
+    max-width: none;
+    min-height: 100%;
+    border-radius: 0;
+  }
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 8px 8px 16px;
+    background: var(--surface);
+  }
+  .modal-body {
+    flex: 1;
+    padding: 16px 16px 8px;
+  }
+  .modal-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-radius: 0;
+  }
+  .modal-footer > .btn {
+    flex: 1 1 auto;
+  }
+  .footer-left {
+    order: 1;
+    width: 100%;
+    margin-right: 0;
+  }
+  .footer-left:empty {
+    display: none;
+  }
+  .footer-left .btn {
+    flex: 1;
+  }
+
+  .login-wrap {
+    padding-top: 2vh;
+  }
+  .login-card {
+    padding: 20px 16px 14px;
+  }
+
+  .toasts {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    max-width: none;
+  }
 }
 
+/* Phones: summary cards and aging groups become compact full-width rows. */
+@media (max-width: 560px) {
+  .cards:not(.cards--compact),
+  .cards--compact,
+  .aging {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .cards:not(.cards--compact) > .card,
+  .cards:not(.cards--compact) > .card:nth-child(n + 4),
+  .aging > .aging-tile,
+  .aging > .aging-tile:nth-child(n + 4) {
+    grid-column: auto;
+  }
+  .card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'label value'
+      'meta  value';
+    align-items: center;
+    column-gap: 12px;
+    padding: 10px 14px;
+    border-top-width: 1px;
+    border-top-color: var(--border);
+    border-left: 4px solid var(--card-accent, var(--border-strong));
+  }
+  .card-label {
+    grid-area: label;
+    font-size: 11.5px;
+  }
+  .card-meta {
+    grid-area: meta;
+    margin-top: 2px;
+    font-size: 12.5px;
+  }
+  .card-value,
+  .cards--compact .card-value {
+    grid-area: value;
+    margin: 0;
+    font-size: 19px;
+    text-align: right;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .aging-tile {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'range amount'
+      'level count'
+      'meter meter';
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 2px;
+    padding: 10px 14px;
+    border-top-width: 1px;
+    border-top-color: var(--border);
+    border-left: 4px solid var(--lvl-color, var(--lvl-normal-dot));
+  }
+  .aging-range {
+    grid-area: range;
+  }
+  .aging-tile .level {
+    grid-area: level;
+  }
+  .aging-amount {
+    grid-area: amount;
+    margin: 0;
+    font-size: 17px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .aging-count {
+    grid-area: count;
+    font-size: 12.5px;
+    text-align: right;
+  }
+  .meter {
+    grid-area: meter;
+    margin-top: 6px;
+  }
+  .aging-share {
+    display: none;
+  }
+
+  .detail-grid,
+  .detail-grid--audit {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
+/* Very small phones (e.g. 320px wide) */
 @media (max-width: 420px) {
-  .cards,
-  .aging,
-  .cards--compact {
+  .hide-xs {
+    display: none;
+  }
+  .nav-inner {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .nav-link:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .filters {
     grid-template-columns: minmax(0, 1fr);
   }
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .seg {
-    width: 100%;
-  }
-  .seg button {
-    flex: 1;
+  .brand-sub {
+    font-size: 12px;
   }
 }
 
 /* ------------------------------------------------------------------ Print */
 
 @media print {
+  /* Always print the full table, never the phone cards. */
+  .entry-list.is-cards .table-wrap {
+    display: block !important;
+  }
+  .entry-cards {
+    display: none !important;
+  }
   body {
     background: #fff;
     font-size: 12px;
