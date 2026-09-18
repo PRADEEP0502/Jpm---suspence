@@ -4,7 +4,7 @@ import { mountEntryList } from '../entry-list.js';
 import { showEntryForm } from '../dialogs.js';
 import { OPEN_COLUMNS } from './dashboard.js';
 
-// SRN | Date | Whom | What | Amount | Age | Status (+ Action). Open rows: Edit, Close. Closed rows: View.
+// SRN | Date | Given To | Particulars | Amount | Age | Status (+ Action). Open rows: Edit, Close. Closed rows: View.
 const DELETED_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'status', 'deleted'];
 
 export function render(main) {

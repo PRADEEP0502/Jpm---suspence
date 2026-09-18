@@ -26,7 +26,7 @@ import { statusBadge, ageBadge } from './ui.js';
 
 const FIELD_LABELS = {
   entryDate: 'Date',
-  whom: 'Whom',
+  whom: 'Given To',
   particulars: 'Particulars',
   amountPaise: 'Amount',
   remark: 'Remark',
@@ -224,7 +224,7 @@ export async function showEntryForm(entry = null) {
       </div>
 
       <div class="field">
-        <label for="f-whom">Whom <span class="req">*</span></label>
+        <label for="f-whom">Given To <span class="req">*</span></label>
         <input
           id="f-whom"
           name="whom"
@@ -239,7 +239,7 @@ export async function showEntryForm(entry = null) {
       </div>
 
       <div class="field">
-        <label for="f-particulars">What / Particulars <span class="req">*</span></label>
+        <label for="f-particulars">Particulars <span class="req">*</span></label>
         <input
           id="f-particulars"
           name="particulars"
@@ -326,7 +326,7 @@ export async function showEntryForm(entry = null) {
 
     if (!values.entryDate) return showFieldError(form, 'entryDate', 'Select the date the amount was given.');
     if (values.entryDate > state.today) return showFieldError(form, 'entryDate', 'Date cannot be in the future.');
-    if (!values.whom) return showFieldError(form, 'whom', 'Enter whom the amount was given to.');
+    if (!values.whom) return showFieldError(form, 'whom', 'Enter the name of the person the amount was given to.');
     if (!values.particulars) return showFieldError(form, 'particulars', 'Enter what the amount was given for.');
     const paise = parseAmountInput(values.amount);
     if (paise === null || paise <= 0) {
@@ -368,8 +368,8 @@ function entrySummaryBox(e) {
       ${statusBadge(e)}
     </div>
     <dl class="summary-box-grid">
-      <div><dt>Whom</dt><dd>${e.whom}</dd></div>
-      <div><dt>What</dt><dd>${e.particulars}</dd></div>
+      <div><dt>Given To</dt><dd>${e.whom}</dd></div>
+      <div><dt>Particulars</dt><dd>${e.particulars}</dd></div>
       <div><dt>Amount</dt><dd class="strong">${fmtMoney(e.amountPaise)}</dd></div>
       <div><dt>Date Given</dt><dd>${fmtDate(e.entryDate)}</dd></div>
       <div><dt>Age</dt><dd>${ageBadge(e)}</dd></div>

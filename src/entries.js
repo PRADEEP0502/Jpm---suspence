@@ -119,7 +119,7 @@ function listEntries(query = {}) {
     }
   }
 
-  // One search box: SRN, whom or particulars. "SRN-001", "srn 1" or "SRN001" find exactly that record.
+  // One search box: SRN, name or particulars. "SRN-001", "srn 1" or "SRN001" find exactly that record.
   const q = cleanText(query.q);
   const srnNo = parseSrn(q);
   if (srnNo !== null) {
@@ -235,7 +235,7 @@ function dashboardSummary() {
   };
 }
 
-/** Names and particulars already in use, for type-ahead suggestions and the Whom filter. */
+/** Names and particulars already in use, for type-ahead suggestions and the Given To filter. */
 function lookups() {
   const uniq = (values) => {
     const seen = new Map();
@@ -270,7 +270,7 @@ function validateEntryInput(body, today) {
   if (entryDate < '2000-01-01') throw new HttpError(400, 'Date is too far in the past.', { field: 'entryDate' });
 
   const whom = cleanText(body.whom);
-  if (!whom) throw new HttpError(400, 'Enter whom the amount was given to.', { field: 'whom' });
+  if (!whom) throw new HttpError(400, 'Enter the name of the person the amount was given to.', { field: 'whom' });
   if (whom.length > 100) throw new HttpError(400, 'Name is too long (max 100 characters).', { field: 'whom' });
 
   const particulars = cleanText(body.particulars);

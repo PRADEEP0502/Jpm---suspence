@@ -54,7 +54,7 @@ function renderHeader() {
             <span class="user-role">${roleLabel(u.role)}</span>
           </div>
           <button type="button" class="btn btn--topbar" data-act="change-password">
-            <span class="hide-xs">Change </span>Password
+            <span class="hide-xs">Change Password</span><span class="show-xs">Password</span>
           </button>
           <button type="button" class="btn btn--topbar" data-act="logout">Logout</button>`
       : html`<span class="user-role user-role--view">View only</span>

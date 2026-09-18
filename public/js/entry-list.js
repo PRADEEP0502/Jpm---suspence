@@ -13,8 +13,8 @@ const COLUMNS = {
   },
   entryDate: { label: 'Date', sort: (e) => e.entryDate, cell: (e) => fmtDate(e.entryDate), cls: 'nowrap' },
   originalDate: { label: 'Original Date', sort: (e) => e.entryDate, cell: (e) => fmtDate(e.entryDate), cls: 'nowrap' },
-  whom: { label: 'Whom', sort: (e) => e.whom.toLowerCase(), cell: (e) => html`<span class="whom">${e.whom}</span>` },
-  particulars: { label: 'What / Particulars', sort: (e) => e.particulars.toLowerCase(), cell: (e) => e.particulars },
+  whom: { label: 'Given To', sort: (e) => e.whom.toLowerCase(), cell: (e) => html`<span class="whom">${e.whom}</span>` },
+  particulars: { label: 'Particulars', sort: (e) => e.particulars.toLowerCase(), cell: (e) => e.particulars },
   amount: {
     label: 'Amount',
     sort: (e) => e.amountPaise,
@@ -107,7 +107,7 @@ const STATUS_TITLES = {
   DELETED: 'Deleted Entries',
 };
 
-// Search box + the filters behind the Filters button (Whom, Date, Age, Amount).
+// Search box + the filters behind the Filters button (Given To, Date, Age, Amount).
 const FILTER_KEYS = ['whom', 'age', 'dateFrom', 'dateTo', 'amountMin', 'amountMax'];
 const EMPTY_FILTERS = { q: '', ...Object.fromEntries(FILTER_KEYS.map((k) => [k, ''])) };
 
@@ -181,7 +181,7 @@ export function mountEntryList(container, config) {
           <input
             type="search"
             data-f="q"
-            placeholder="Search by SRN, whom or particulars"
+            placeholder="Search by SRN, name or particulars"
             aria-label="Search entries"
           />
         </div>
@@ -206,7 +206,7 @@ export function mountEntryList(container, config) {
         ${cfg.fixed.whom
           ? ''
           : html`<div class="field">
-              <label for="${cfg.id}-whom">Whom</label>
+              <label for="${cfg.id}-whom">Given To</label>
               <select id="${cfg.id}-whom" data-f="whom"><option value="">Everyone</option></select>
             </div>`}
         <div class="field">

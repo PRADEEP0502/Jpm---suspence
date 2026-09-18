@@ -51,17 +51,17 @@ You will be asked to set a new password straight away. After that, open **Users*
 
 ## 4. Daily use (Manage Entries)
 
-1. **Add**: click **+ Add Suspense Entry** and fill in the Date, Whom, What / Particulars (type it, or tap a quick-pick such as *Travel*), Amount, and an optional Remark. The **SRN**, Status (**OPEN**), Created By and Created Date are filled in automatically.
-2. **Edit**: click **Edit** on an open entry to correct its Date, Whom, Particulars, Amount or Remark. **The SRN never changes.**
+1. **Add**: click **+ Add Suspense Entry** and fill in the Date Given, Given To, Particulars (type it, or tap a quick-pick such as *Travel*), Amount, and an optional Remark. The **SRN**, Status (**OPEN**), Created By and Created Date are filled in automatically.
+2. **Edit**: click **Edit** on an open entry to correct its Date, Given To, Particulars, Amount or Remark. **The SRN never changes.**
 3. **Close**: when the amount is settled, click **Close**, add an optional closing remark, and confirm *"Are you sure you want to close this suspense entry?"*. The **Closed Date** (today) and **Closed By** (your name) are saved automatically, and the entry moves to **Closed History**.
 
 In the table, open entries show **Edit** and **Close**; closed entries show **View**. Click any row to see the full record, including created/updated information and the change history.
 
 ## 5. Search and filters
 
-- **One search box** finds an SRN, a name (Whom) or particulars. Typing `SRN-001` (or `srn 1`) shows exactly that record; `Ashok` shows all of Ashok's entries; `Stationery` shows all stationery-related entries.
+- **One search box** finds an SRN, a name (Given To) or particulars. Typing `SRN-001` (or `srn 1`) shows exactly that record; `Ashok` shows all of Ashok's entries; `Stationery` shows all stationery-related entries.
 - **All / Open / Closed** switches which entries are listed. The **All Suspense** page lists every entry (open and closed, newest first) with its open and closed totals.
-- **Filters** narrow the list further by **Whom**, **Date** (from/to), **Age** group and **Amount** (from/to).
+- **Filters** narrow the list further by **Given To**, **Date** (from/to), **Age** group and **Amount** (from/to).
 - On the Dashboard, clicking a name in the **Person-wise Summary** lists that person's entries, and clicking an **Aging Summary** group lists the open entries in that age range.
 
 ## 6. On phones and tablets
@@ -69,7 +69,7 @@ In the table, open entries show **Edit** and **Close**; closed entries show **Vi
 The same pages work on any device; the layout adapts to the screen:
 
 - **Wide screens** show the full table.
-- **Phones and narrow screens** show one card per entry (SRN and status, then whom, amount, particulars, date and age), because a wide table would otherwise be cut off. A **Sort** box replaces the sortable column headings.
+- **Phones and narrow screens** show one card per entry (SRN and status, then the name, amount, particulars, date and age), because a wide table would otherwise be cut off. A **Sort** box replaces the sortable column headings.
 - Summary cards and aging groups become full-width rows on phones, the menu shows every page instead of scrolling sideways, and dialogs open as full-screen sheets with the buttons within thumb reach.
 - Printing always uses the full table, whatever the screen size.
 

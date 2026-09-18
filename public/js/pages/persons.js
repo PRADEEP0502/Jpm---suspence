@@ -1,7 +1,7 @@
 import { html, setHtml, $, api, fmtMoney, fmtDays, plural } from '../lib.js';
 import { mountEntryList } from '../entry-list.js';
 
-// The person is already named in the panel heading, so the Whom column is left out here.
+// The person is already named in the panel heading, so the Given To column is left out here.
 const PERSON_OPEN_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'age', 'status'];
 const PERSON_ALL_COLUMNS = [...PERSON_OPEN_COLUMNS, 'closedDate'];
 
@@ -53,7 +53,7 @@ export function render(main, params) {
         <table class="data-table data-table--compact">
           <thead>
             <tr>
-              <th scope="col">Whom</th>
+              <th scope="col">Given To</th>
               <th scope="col" class="num">Open Amount</th>
               <th scope="col" class="num">Closed Amount</th>
               <th scope="col" class="num">Total Amount</th>
@@ -64,7 +64,7 @@ export function render(main, params) {
               const isSel = p.name.toLowerCase() === selected.toLowerCase();
               const href = `#/persons/${encodeURIComponent(p.name)}`;
               return html`<tr class="is-clickable ${isSel ? 'is-selected' : ''}" data-href="${href}">
-                <td data-label="Whom"><div>
+                <td data-label="Given To"><div>
                   <a class="row-link" href="${href}" ${isSel ? html`aria-current="true"` : ''}>${p.name}</a>
                   <div class="cell-sub">
                     ${plural(p.totalCount, 'entry', 'entries')}${p.openCount

@@ -50,12 +50,12 @@ export function summaryCards(c) {
 }
 
 /**
- * Person-wise / particular-wise summary: Whom (or Particular) | Open Amount | Closed Amount | Total Amount.
+ * Person-wise / particular-wise summary: Given To (or Particulars) | Open Amount | Closed Amount | Total Amount.
  * rowAttrs(row) may return attributes (e.g. data-whom) that make a row clickable.
  */
 export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
   const shown = limit ? rows.slice(0, limit) : rows;
-  const nameLabel = kind === 'person' ? 'Whom' : 'Particular';
+  const nameLabel = kind === 'person' ? 'Given To' : 'Particulars';
   const amountCols = [
     ['Open Amount', 'openAmountPaise'],
     ['Closed Amount', 'closedAmountPaise'],

@@ -148,6 +148,11 @@ textarea {
   white-space: nowrap;
 }
 
+/* Shorter labels on very small phones (see the 420px breakpoint). */
+.show-xs {
+  display: none;
+}
+
 /* ------------------------------------------------------------------ Layout */
 
 .container {
@@ -2010,6 +2015,9 @@ textarea {
 @media (max-width: 420px) {
   .hide-xs {
     display: none;
+  }
+  .show-xs {
+    display: inline;
   }
   .nav-inner {
     display: grid;
