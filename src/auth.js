@@ -3,17 +3,18 @@
 /**
  * Login, sessions and permission checks.
  *  - Passwords: scrypt with a per-user random salt.
- *  - Sessions: random token in an HttpOnly cookie; only its SHA-256 hash is stored.
+ *  - Sessions: random token in an HttpOnly cookie; only its SHA-256 hash is stored, and MongoDB
+ *    removes each session automatically when it expires.
  *  - Repeated failed logins for the same login ID are temporarily locked.
  */
 
 const crypto = require('crypto');
 const db = require('./db');
-const { HttpError, nowTimestamp } = require('./util');
+const config = require('./config');
+const { HttpError } = require('./util');
 
 const COOKIE_NAME = 'jpm_sid';
-const SESSION_HOURS = Number(process.env.SESSION_HOURS) || 12;
-const COOKIE_SECURE = String(process.env.COOKIE_SECURE || 'false').toLowerCase() === 'true';
+const SESSION_HOURS = config.SESSION_HOURS;
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 5;
@@ -73,47 +74,45 @@ function parseCookies(header = '') {
 
 function setSessionCookie(res, token, maxAgeSeconds) {
   const parts = [`${COOKIE_NAME}=${token}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSeconds}`];
-  if (COOKIE_SECURE) parts.push('Secure');
+  if (config.COOKIE_SECURE) parts.push('Secure');
   res.setHeader('Set-Cookie', parts.join('; '));
 }
 
-function toPublicUser(row) {
+function toPublicUser(doc) {
   return {
-    id: row.id,
-    username: row.username,
-    displayName: row.display_name,
-    role: row.role,
-    mustChangePassword: !!row.must_change_password,
+    id: String(doc._id),
+    username: doc.username,
+    displayName: doc.displayName,
+    role: doc.role,
+    mustChangePassword: !!doc.mustChangePassword,
   };
 }
 
-function createSession(res, userId) {
+async function createSession(res, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const now = new Date();
-  const expires = new Date(now.getTime() + SESSION_HOURS * 3600 * 1000);
-  db.transaction(() => {
-    db.run('DELETE FROM sessions WHERE expires_at < @now', { now: now.toISOString() });
-    db.run(
-      `INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
-       VALUES (@hash, @userId, @created, @expires)`,
-      { hash: sha256(token), userId, created: now.toISOString(), expires: expires.toISOString() }
-    );
+  const expiresAt = new Date(now.getTime() + SESSION_HOURS * 3600 * 1000);
+  await db.collections.sessions().insertOne({
+    _id: sha256(token),
+    userId: db.toObjectId(userId),
+    createdAt: now,
+    expiresAt,
   });
   setSessionCookie(res, token, SESSION_HOURS * 3600);
 }
 
-function destroySession(req, res) {
+async function destroySession(req, res) {
   const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
-  if (token) db.run('DELETE FROM sessions WHERE token_hash = @hash', { hash: sha256(token) });
+  if (token) await db.collections.sessions().deleteOne({ _id: sha256(token) });
   setSessionCookie(res, '', 0);
 }
 
 /** Log a user out everywhere (optionally keeping the session making this request). */
-function destroyAllSessionsForUser(userId, keepReq) {
+async function destroyAllSessionsForUser(userId, keepReq) {
   const keep = keepReq ? parseCookies(keepReq.headers.cookie)[COOKIE_NAME] : null;
-  db.run('DELETE FROM sessions WHERE user_id = @userId AND token_hash != @keep', {
-    userId,
-    keep: keep ? sha256(keep) : '',
+  await db.collections.sessions().deleteMany({
+    userId: db.toObjectId(userId),
+    _id: { $ne: keep ? sha256(keep) : '' },
   });
 }
 
@@ -121,7 +120,7 @@ function destroyAllSessionsForUser(userId, keepReq) {
 // Login
 // ---------------------------------------------------------------------------
 
-function login(req, res, username, password) {
+async function login(req, res, username, password) {
   const loginId = String(username || '').trim();
   if (!loginId || !password) throw new HttpError(400, 'Enter your login ID and password.');
 
@@ -132,9 +131,9 @@ function login(req, res, username, password) {
     throw new HttpError(429, `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`);
   }
 
-  const row = db.get('SELECT * FROM users WHERE username = @u COLLATE NOCASE', { u: loginId });
+  const doc = await db.collections.users().findOne({ usernameLower: loginId.toLowerCase() });
   let ok = false;
-  if (row) ok = verifyPassword(String(password), row.password_hash);
+  if (doc) ok = verifyPassword(String(password), doc.passwordHash);
   else verifyPassword(String(password), DUMMY_HASH);
 
   if (!ok) {
@@ -144,51 +143,51 @@ function login(req, res, username, password) {
     failedLogins.set(key, next);
     throw new HttpError(401, 'Invalid login ID or password.');
   }
-  if (!row.is_active) {
+  if (!doc.isActive) {
     throw new HttpError(403, 'This login has been deactivated. Contact the administrator.');
   }
 
   failedLogins.delete(key);
-  createSession(res, row.id);
-  return toPublicUser(row);
+  await createSession(res, doc._id);
+  return toPublicUser(doc);
 }
 
-function changePassword(req, currentPassword, newPassword) {
-  const row = db.get('SELECT * FROM users WHERE id = @id', { id: req.user.id });
-  if (!row || !verifyPassword(String(currentPassword || ''), row.password_hash)) {
+async function changePassword(req, currentPassword, newPassword) {
+  const doc = await db.collections.users().findOne({ _id: db.toObjectId(req.user.id) });
+  if (!doc || !verifyPassword(String(currentPassword || ''), doc.passwordHash)) {
     throw new HttpError(400, 'Current password is incorrect.', { field: 'currentPassword' });
   }
   validateNewPassword(newPassword);
   if (currentPassword === newPassword) {
     throw new HttpError(400, 'New password must be different from the current password.', { field: 'newPassword' });
   }
-  db.transaction(() => {
-    db.run(`UPDATE users SET password_hash = @hash, must_change_password = 0, updated_at = @now WHERE id = @id`, {
-      hash: hashPassword(newPassword),
-      now: nowTimestamp(),
-      id: row.id,
-    });
-    destroyAllSessionsForUser(row.id, req);
-  });
-  return toPublicUser(db.get('SELECT * FROM users WHERE id = @id', { id: row.id }));
+  await db.collections.users().updateOne(
+    { _id: doc._id },
+    { $set: { passwordHash: hashPassword(newPassword), mustChangePassword: false, updatedAt: new Date() } }
+  );
+  await destroyAllSessionsForUser(doc._id, req);
+  return toPublicUser(await db.collections.users().findOne({ _id: doc._id }));
 }
 
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
 
-function loadUser(req, _res, next) {
+async function loadUser(req, _res, next) {
   req.user = null;
-  const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
-  if (token) {
-    const row = db.get(
-      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-        WHERE s.token_hash = @hash AND s.expires_at > @now AND u.is_active = 1`,
-      { hash: sha256(token), now: new Date().toISOString() }
-    );
-    if (row) req.user = toPublicUser(row);
+  try {
+    const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    if (token) {
+      const session = await db.collections.sessions().findOne({ _id: sha256(token), expiresAt: { $gt: new Date() } });
+      if (session) {
+        const user = await db.collections.users().findOne({ _id: session.userId, isActive: true });
+        if (user) req.user = toPublicUser(user);
+      }
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 }
 
 /** Logged in, active, and not waiting on a forced password change. */
@@ -233,4 +232,5 @@ module.exports = {
   requireLogin,
   requireAdmin,
   requireJsonForWrites,
+  toPublicUser,
 };

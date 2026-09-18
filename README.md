@@ -11,7 +11,19 @@ For every entry it shows **who** received the amount, **what** it was for, **how
 
 ## 1. Starting the application
 
-**Requirement:** [Node.js](https://nodejs.org) version 20 or newer (LTS) on the computer that will host the dashboard.
+**Requirements**
+
+1. [Node.js](https://nodejs.org) version 20 or newer (LTS) on the computer that will host the dashboard.
+2. A MongoDB database — [MongoDB Atlas](https://cloud.mongodb.com) (the free tier is enough) or any MongoDB server.
+3. A **`.env`** file next to `server.js` with the connection string. Copy `.env.example` to `.env` and fill it in:
+
+```
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DB=jpm_suspense
+```
+
+> Keep `.env` private — it holds the database password. It is excluded from Git, so it never reaches GitHub.
+> In Atlas, open **Network Access** and allow the IP address of the computer that runs the server.
 
 **Easiest (Windows):** double-click **`start-dashboard.bat`**. The first run installs the required packages; after that it starts the server and opens the browser.
 
@@ -105,8 +117,16 @@ Every figure is calculated from the database each time the page loads. Nothing i
 - **Delete** is administrator-only, requires a reason, and only hides the entry: it is removed from lists and totals but kept, and can be restored from *Manage Entries → Deleted*. SRNs are never reused.
 - If two people edit the same entry at the same moment, the second save is stopped with a message instead of overwriting the first.
 
-**Where data is stored:** `data/suspense.sqlite` (a single database file).
-**Backups:** a copy is saved automatically once a day in `data/backups/` (the last 30 days are kept). To back up manually, copy the `data` folder. To restore, stop the server and replace `data/suspense.sqlite` with a backup copy.
+**Where data is stored:** in MongoDB — collections `entries`, `users`, `sessions`, `counters` and `audit_log`, in the database named by `MONGODB_DB`.
+
+**Backups:** MongoDB Atlas free clusters have no automatic backups, so the server saves its own copy of everything to `data/backups/backup-<date>.json` once a day while it runs (the last 30 days are kept).
+
+```bash
+npm run backup                                          # take a copy right now
+npm run restore -- data/backups/backup-2026-09-18.json  # load a copy into an EMPTY database
+```
+
+Backups never contain passwords, and a restore refuses to run into a database that already has entries. Paid Atlas plans add automatic point-in-time backups.
 
 ## 9. Common tasks
 
@@ -118,14 +138,14 @@ npm run reset-password -- admin NewTemp@123
 
 Start the server again and log in with the temporary password.
 
-**Remove the sample data before going live.** The four sample entries (SRN-001 to SRN-004) are added only when the database is first created. To start with an empty database: stop the server, delete the `data` folder, and start again with sample data turned off:
+**Remove the sample data before going live.** The four sample entries (SRN-001 to SRN-004) are added only when the database is empty at the first start. Either delete them from Manage Entries (an administrator can delete them; they stay restorable), or start over with a clean database — point `MONGODB_DB` at a new name, or drop the database in Atlas — and start with sample data turned off:
 
 ```bat
 set SEED_SAMPLE_DATA=false
 npm start
 ```
 
-This also resets logins back to `admin` / `Admin@123`, and numbering starts again at SRN-001.
+A clean database also recreates the `admin` / `Admin@123` login, and numbering starts again at SRN-001.
 
 ## 10. Settings (optional)
 
@@ -137,7 +157,10 @@ Set these as environment variables before starting the server:
 | `APP_TIMEZONE` | `Asia/Kolkata` | Time zone used for "today" and age |
 | `SEED_SAMPLE_DATA` | `true` | Add the 4 sample entries when a new database is created |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / `Admin@123` | First administrator login (new database only) |
-| `DATA_DIR` | `./data` | Folder for the database and backups |
+| `MONGODB_URI` | (required) | MongoDB connection string — keep it in `.env` |
+| `MONGODB_DB` | `jpm_suspense` | Database name inside the cluster |
+| `BACKUP_DIR` | `./data/backups` | Folder for the daily backup files |
+| `AUTO_BACKUP` | `true` | Set `false` to switch off the daily backup file |
 | `BACKUP_KEEP_DAYS` | `30` | Number of daily backups to keep |
 | `SESSION_HOURS` | `12` | How long a login stays valid |
 | `COOKIE_SECURE` | `false` | Set `true` if the site is served over HTTPS |
@@ -146,11 +169,13 @@ Set these as environment variables before starting the server:
 
 ## Technical reference
 
-**Stack:** Node.js + Express. SQLite via [sql.js](https://github.com/sql-js/sql.js) (SQLite compiled to WebAssembly, so no C++ build tools are needed on Windows). The frontend is plain HTML, CSS and JavaScript modules with no build step.
+**Stack:** Node.js + Express + MongoDB (the official `mongodb` driver). The frontend is plain HTML, CSS and JavaScript modules with no build step.
 
 ```
 server.js              Express app and API routes
-src/db.js              SQLite storage, schema and upgrades, atomic saves, daily backups
+src/config.js          Settings, including reading the .env file
+src/db.js              MongoDB connection, indexes and the SRN counter
+src/backup.js          Daily backup of the whole database to a JSON file
 src/entries.js         SRN generation, entry lifecycle, search/filters, dashboard calculations
 src/auth.js            Passwords (scrypt), sessions, permission checks
 src/users.js           User management
@@ -158,6 +183,8 @@ src/audit.js           Change history
 src/util.js            Dates, money parsing, SRN format, age groups
 src/seed.js            Sample data
 scripts/reset-password.js
+scripts/backup.js      npm run backup
+scripts/restore.js     npm run restore
 public/                Browser application (index.html, css/, js/, js/pages/)
 ```
 
@@ -165,16 +192,19 @@ public/                Browser application (index.html, css/, js/, js/pages/)
 
 | Table | Purpose |
 |-------|---------|
-| `entries` | One row per suspense entry: `srn_no` + `srn` (unique, permanent), `entry_date`, `whom`, `particulars`, `amount_paise` (integer paise, which avoids rounding errors), `remark`, `status` (OPEN/CLOSED), `closed_date`, `closed_at`, `closed_by`, `closing_remark`, `created_at`, `created_by`, `updated_at`, `updated_by`, soft-delete fields, and `version` (edit-conflict check) |
-| `users` | Logins: `username`, `display_name`, `role` (ADMIN/ENTRY), scrypt `password_hash`, `must_change_password`, `is_active` |
-| `sessions` | Active logins (only a SHA-256 hash of the session token is stored) |
-| `audit_log` | Change history: action, JSON details, performed by, timestamp |
+| `entries` | One document per suspense entry: `srnNo` + `srn` (unique, permanent), `entryDate`, `whom`, `particulars`, `amountPaise` (integer paise, which avoids rounding errors), `remark`, `status` (OPEN/CLOSED), `closedDate`, `closedAt`, `closedBy`, `closingRemark`, `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, soft-delete fields, and `version` (edit-conflict check) |
+| `counters` | The SRN running number (`_id: "srn"`) |
+| `users` | Logins: `username`, `displayName`, `role` (ADMIN/ENTRY), scrypt `passwordHash`, `mustChangePassword`, `isActive` |
+| `sessions` | Active logins (only a SHA-256 hash of the session token is stored; MongoDB deletes them automatically when they expire) |
+| `audit_log` | Change history: action, details, performed by, timestamp |
 
-**SRN generation:** inside the same database transaction as the insert, `srn_no = MAX(srn_no) + 1` (deleted rows included) and `srn = 'SRN-' + srn_no` padded to three digits (`SRN-001`, …, `SRN-999`, `SRN-1000`). Unique constraints on both columns guarantee no duplicates. Nothing ever updates these columns afterwards.
+**SRN generation:** an atomic `$inc` on the `counters` document hands each new entry the next number, so simultaneous adds — even from different computers — can never collide. `srn` is that number padded to three digits (`SRN-001`, …, `SRN-999`, `SRN-1000`). Unique indexes on `srn` and `srnNo` are a second guard, and nothing ever changes these fields afterwards.
 
-**Lifecycle:** `OPEN → CLOSED` (Entry User or Administrator; closed date and closed-by set by the server). `CLOSED → OPEN` via Reopen (Administrator, reason required). Soft delete / restore (Administrator, reason required). A database constraint ensures an OPEN entry has no closed date and a CLOSED entry always has one.
+**Lifecycle:** `OPEN → CLOSED` (Entry User or Administrator; closed date and closed-by set by the server). `CLOSED → OPEN` via Reopen (Administrator, reason required). Soft delete / restore (Administrator, reason required). Each change is applied as a single conditional MongoDB update, so two people acting at the same moment cannot both win.
 
-**Upgrades:** the schema version is stored in the database and upgrades run automatically at start-up. A copy is saved to `data/backups/suspense-before-upgrade-v<N>-<date>.sqlite` first. Version 2 converted earlier `ST-001`-style numbers to `SRN-001` while keeping each entry's number and history.
+**Indexes** are created at start-up: unique `srn` and `srnNo`, `{isDeleted, status}`, `entryDate`, lower-cased name and particulars (for case-insensitive filters), unique `usernameLower`, and a TTL index that expires old sessions automatically.
+
+**Networks that block SRV lookups:** `mongodb+srv://` needs a DNS SRV record. If the network cannot resolve it, the server retries automatically using public DNS (8.8.8.8 / 1.1.1.1); set `DNS_SERVERS` to use different ones.
 
 ### API (JSON, under `/api`)
 

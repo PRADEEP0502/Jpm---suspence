@@ -1,18 +1,20 @@
 {
   "name": "jpm-suspense-dashboard",
   "version": "1.0.0",
-  "description": "JPM Suspense Amount Dashboard - track amounts given out that are pending settlement",
+  "description": "JPM Suspense Amount Dashboard - track amounts given out that are pending settlement (MongoDB)",
   "private": true,
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "reset-password": "node scripts/reset-password.js"
+    "reset-password": "node scripts/reset-password.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "express": "^4.22.3",
-    "sql.js": "^1.14.2"
+    "mongodb": "^7.6.0"
   }
 }

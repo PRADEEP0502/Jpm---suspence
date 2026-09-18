@@ -6,7 +6,9 @@
  * every viewer regardless of where the server or browser clock is set.
  */
 
-const TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Kolkata';
+const config = require('./config');
+
+const TIMEZONE = config.TIMEZONE;
 
 // Upper bound per entry: Rs 10 crore. Guards against typos like an extra zero run.
 const MAX_AMOUNT_PAISE = 10_000_000_000;
@@ -59,6 +61,15 @@ function isValidISODate(value) {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
+/** Whole days between two YYYY-MM-DD dates (time zones cannot shift the result). */
+function daysBetween(fromISO, toISO) {
+  const at = (iso) => {
+    const [y, m, d] = String(iso).split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((at(toISO) - at(fromISO)) / 86400000);
+}
+
 function bucketForAge(days) {
   return AGE_BUCKETS.find((b) => days >= b.min && (b.max === null || days <= b.max)) || AGE_BUCKETS[0];
 }
@@ -90,8 +101,9 @@ function parseAmountToPaise(value) {
   return Number.isSafeInteger(paise) ? paise : null;
 }
 
-function escapeLike(value) {
-  return value.replace(/[\%_]/g, (c) => `\${c}`);
+/** Make user input safe to use inside a regular expression (search box). */
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 module.exports = {
@@ -103,10 +115,11 @@ module.exports = {
   todayISO,
   nowTimestamp,
   isValidISODate,
+  daysBetween,
   bucketForAge,
   formatSrn,
   parseSrn,
   cleanText,
   parseAmountToPaise,
-  escapeLike,
+  escapeRegex,
 };

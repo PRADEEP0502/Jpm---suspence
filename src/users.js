@@ -9,31 +9,34 @@
 const db = require('./db');
 const audit = require('./audit');
 const auth = require('./auth');
-const { HttpError, cleanText, nowTimestamp } = require('./util');
+const config = require('./config');
+const { HttpError, cleanText } = require('./util');
 
 const ROLES = ['ADMIN', 'ENTRY'];
 
-function mapUser(r) {
+function mapUser(doc) {
   return {
-    id: r.id,
-    username: r.username,
-    displayName: r.display_name,
-    role: r.role,
-    isActive: !!r.is_active,
-    mustChangePassword: !!r.must_change_password,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    id: String(doc._id),
+    username: doc.username,
+    displayName: doc.displayName,
+    role: doc.role,
+    isActive: !!doc.isActive,
+    mustChangePassword: !!doc.mustChangePassword,
+    createdAt: doc.createdAt ?? null,
+    updatedAt: doc.updatedAt ?? null,
   };
 }
 
-function listUsers() {
-  return db.all('SELECT * FROM users ORDER BY is_active DESC, role, display_name COLLATE NOCASE').map(mapUser);
+async function listUsers() {
+  const docs = await db.collections.users().find({}).sort({ isActive: -1, role: 1, displayName: 1 }).toArray();
+  return docs.map(mapUser);
 }
 
-function findUser(id) {
-  const row = db.get('SELECT * FROM users WHERE id = @id', { id: Number(id) || 0 });
-  if (!row) throw new HttpError(404, 'User not found.');
-  return row;
+async function findUser(id) {
+  const _id = db.toObjectId(id);
+  const doc = _id ? await db.collections.users().findOne({ _id }) : null;
+  if (!doc) throw new HttpError(404, 'User not found.');
+  return doc;
 }
 
 function validateDisplayName(value) {
@@ -49,14 +52,13 @@ function validateRole(value) {
   return role;
 }
 
-function activeAdminCount(excludeId = 0) {
-  return db.get(
-    "SELECT COUNT(*) AS n FROM users WHERE role = 'ADMIN' AND is_active = 1 AND id != @excludeId",
-    { excludeId }
-  ).n;
+async function activeAdminCount(excludeId = null) {
+  const filter = { role: 'ADMIN', isActive: true };
+  if (excludeId) filter._id = { $ne: db.toObjectId(excludeId) };
+  return db.collections.users().countDocuments(filter);
 }
 
-function createUser(body, actor, { mustChangePassword = true } = {}) {
+async function createUser(body, actor, { mustChangePassword = true } = {}) {
   const displayName = validateDisplayName(body.displayName);
   const username = String(body.username || '').trim();
   if (!/^[A-Za-z0-9._-]{3,30}$/.test(username)) {
@@ -67,90 +69,88 @@ function createUser(body, actor, { mustChangePassword = true } = {}) {
   const role = validateRole(body.role);
   auth.validateNewPassword(body.password, 'password');
 
-  if (db.get('SELECT id FROM users WHERE username = @u COLLATE NOCASE', { u: username })) {
-    throw new HttpError(409, 'This login ID is already in use.', { field: 'username' });
+  const doc = {
+    username,
+    usernameLower: username.toLowerCase(),
+    displayName,
+    role,
+    passwordHash: auth.hashPassword(body.password),
+    mustChangePassword: !!mustChangePassword,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: null,
+  };
+  let insertedId;
+  try {
+    ({ insertedId } = await db.collections.users().insertOne(doc));
+  } catch (err) {
+    if (err && err.code === 11000) throw new HttpError(409, 'This login ID is already in use.', { field: 'username' });
+    throw err;
   }
-
-  return db.transaction(() => {
-    const { lastId } = db.run(
-      `INSERT INTO users (username, display_name, role, password_hash, must_change_password, is_active, created_at)
-       VALUES (@username, @displayName, @role, @hash, @mustChange, 1, @now)`,
-      {
-        username,
-        displayName,
-        role,
-        hash: auth.hashPassword(body.password),
-        mustChange: mustChangePassword ? 1 : 0,
-        now: nowTimestamp(),
-      }
-    );
-    audit.logAction({ action: 'USER_CREATE', details: { userId: lastId, username, displayName, role }, user: actor });
-    return mapUser(findUser(lastId));
+  await audit.logAction({
+    action: 'USER_CREATE',
+    details: { userId: String(insertedId), username, displayName, role },
+    user: actor,
   });
+  return mapUser({ ...doc, _id: insertedId });
 }
 
-function updateUser(id, body, actor) {
-  const row = findUser(id);
-  const displayName = body.displayName !== undefined ? validateDisplayName(body.displayName) : row.display_name;
-  const role = body.role !== undefined ? validateRole(body.role) : row.role;
-  const isActive = body.isActive !== undefined ? (body.isActive ? 1 : 0) : row.is_active;
+async function updateUser(id, body, actor) {
+  const doc = await findUser(id);
+  const displayName = body.displayName !== undefined ? validateDisplayName(body.displayName) : doc.displayName;
+  const role = body.role !== undefined ? validateRole(body.role) : doc.role;
+  const isActive = body.isActive !== undefined ? !!body.isActive : !!doc.isActive;
 
-  if (actor && actor.id === row.id) {
-    if (role !== row.role) throw new HttpError(400, 'You cannot change your own role.', { field: 'role' });
+  if (actor && actor.id === String(doc._id)) {
+    if (role !== doc.role) throw new HttpError(400, 'You cannot change your own role.', { field: 'role' });
     if (!isActive) throw new HttpError(400, 'You cannot deactivate your own login.');
   }
-  const removesAdmin = row.role === 'ADMIN' && row.is_active && (role !== 'ADMIN' || !isActive);
-  if (removesAdmin && activeAdminCount(row.id) === 0) {
+  const removesAdmin = doc.role === 'ADMIN' && doc.isActive && (role !== 'ADMIN' || !isActive);
+  if (removesAdmin && (await activeAdminCount(doc._id)) === 0) {
     throw new HttpError(400, 'At least one active administrator is required.');
   }
 
   const changes = {};
-  if (displayName !== row.display_name) changes.displayName = { from: row.display_name, to: displayName };
-  if (role !== row.role) changes.role = { from: row.role, to: role };
-  if (isActive !== row.is_active) changes.isActive = { from: !!row.is_active, to: !!isActive };
-  if (Object.keys(changes).length === 0) return mapUser(row);
+  if (displayName !== doc.displayName) changes.displayName = { from: doc.displayName, to: displayName };
+  if (role !== doc.role) changes.role = { from: doc.role, to: role };
+  if (isActive !== !!doc.isActive) changes.isActive = { from: !!doc.isActive, to: isActive };
+  if (Object.keys(changes).length === 0) return mapUser(doc);
 
-  return db.transaction(() => {
-    db.run(
-      `UPDATE users SET display_name = @displayName, role = @role, is_active = @isActive, updated_at = @now
-        WHERE id = @id`,
-      { displayName, role, isActive, now: nowTimestamp(), id: row.id }
-    );
-    if (!isActive || changes.role) auth.destroyAllSessionsForUser(row.id);
-    audit.logAction({
-      action: 'USER_UPDATE',
-      details: { userId: row.id, username: row.username, changes },
-      user: actor,
-    });
-    return mapUser(findUser(row.id));
+  await db.collections.users().updateOne(
+    { _id: doc._id },
+    { $set: { displayName, role, isActive, updatedAt: new Date() } }
+  );
+  if (!isActive || changes.role) await auth.destroyAllSessionsForUser(doc._id);
+  await audit.logAction({
+    action: 'USER_UPDATE',
+    details: { userId: String(doc._id), username: doc.username, changes },
+    user: actor,
   });
+  return mapUser(await db.collections.users().findOne({ _id: doc._id }));
 }
 
-function resetPassword(id, body, actor) {
-  const row = findUser(id);
+async function resetPassword(id, body, actor) {
+  const doc = await findUser(id);
   auth.validateNewPassword(body.password, 'password');
-  return db.transaction(() => {
-    db.run(
-      `UPDATE users SET password_hash = @hash, must_change_password = 1, updated_at = @now WHERE id = @id`,
-      { hash: auth.hashPassword(body.password), now: nowTimestamp(), id: row.id }
-    );
-    auth.destroyAllSessionsForUser(row.id);
-    audit.logAction({
-      action: 'USER_PASSWORD_RESET',
-      details: { userId: row.id, username: row.username },
-      user: actor,
-    });
-    return mapUser(findUser(row.id));
+  await db.collections.users().updateOne(
+    { _id: doc._id },
+    { $set: { passwordHash: auth.hashPassword(body.password), mustChangePassword: true, updatedAt: new Date() } }
+  );
+  await auth.destroyAllSessionsForUser(doc._id);
+  await audit.logAction({
+    action: 'USER_PASSWORD_RESET',
+    details: { userId: String(doc._id), username: doc.username },
+    user: actor,
   });
+  return mapUser(await db.collections.users().findOne({ _id: doc._id }));
 }
 
 /** First run: create the initial administrator login. */
-function ensureDefaultAdmin() {
-  const { n } = db.get('SELECT COUNT(*) AS n FROM users');
-  if (n > 0) return null;
-  const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'Admin@123';
-  createUser({ displayName: 'Admin', username, password, role: 'ADMIN' }, null, { mustChangePassword: true });
+async function ensureDefaultAdmin() {
+  if ((await db.collections.users().countDocuments({}, { limit: 1 })) > 0) return null;
+  const username = config.ADMIN_USERNAME;
+  const password = config.ADMIN_PASSWORD;
+  await createUser({ displayName: 'Admin', username, password, role: 'ADMIN' }, null, { mustChangePassword: true });
   return { username, password };
 }
 

@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * Suspense entry lifecycle and all dashboard calculations.
+ * Suspense entry lifecycle and all dashboard calculations (MongoDB).
  *
  * Every entry gets a permanent SRN (Suspense Reference Number: SRN-001, SRN-002, ...) when it is
- * created. It is the next running number, is never reused, and never changes on edit or close.
+ * created. The number comes from an atomic counter, is never reused, and never changes on edit or close.
  *
  *   OPEN   --close-->  CLOSED        (entry user or admin; closed date = today, automatic)
  *   CLOSED --reopen--> OPEN          (admin only, reason required, audited)
  *   any    --delete--> deleted flag  (admin only, soft delete, reason required, restorable)
  *
- * Nothing is ever physically removed from the entries table.
+ * Nothing is ever physically removed from the entries collection.
  */
 
 const db = require('./db');
@@ -21,72 +21,77 @@ const {
   MAX_AMOUNT_PAISE,
   HttpError,
   todayISO,
-  nowTimestamp,
   isValidISODate,
   bucketForAge,
   formatSrn,
   parseSrn,
   cleanText,
   parseAmountToPaise,
-  escapeLike,
+  escapeRegex,
+  daysBetween,
 } = require('./util');
-
-// Age in whole days = (closed date, or today while still open) - date the amount was given.
-const AGE_SQL = 'MAX(0, CAST(julianday(COALESCE(e.closed_date, @today)) - julianday(e.entry_date) AS INTEGER))';
-const BASE_SELECT = `SELECT e.*, ${AGE_SQL} AS age_days FROM entries e`;
 
 const LIST_STATUSES = ['OPEN', 'CLOSED', 'ALL', 'DELETED'];
 
-function mapEntry(r) {
-  const bucket = bucketForAge(r.age_days);
+/** Age in whole days: (closed date, or today while still open) - the date the amount was given. */
+function ageOf(doc, today) {
+  return Math.max(0, daysBetween(doc.entryDate, doc.closedDate || today));
+}
+
+function mapEntry(doc, today) {
+  const ageDays = ageOf(doc, today);
+  const bucket = bucketForAge(ageDays);
   return {
-    id: r.id,
-    srnNo: r.srn_no,
-    srn: r.srn,
-    entryDate: r.entry_date,
-    whom: r.whom,
-    particulars: r.particulars,
-    amountPaise: r.amount_paise,
-    remark: r.remark,
-    status: r.status,
-    ageDays: r.age_days,
+    id: String(doc._id),
+    srnNo: doc.srnNo,
+    srn: doc.srn,
+    entryDate: doc.entryDate,
+    whom: doc.whom,
+    particulars: doc.particulars,
+    amountPaise: doc.amountPaise,
+    remark: doc.remark ?? null,
+    status: doc.status,
+    ageDays,
     ageBucket: bucket.key,
     ageLevel: bucket.level,
     ageLevelLabel: bucket.levelLabel,
-    closedDate: r.closed_date,
-    closedAt: r.closed_at,
-    closedBy: r.closed_by,
-    closingRemark: r.closing_remark,
-    isDeleted: !!r.is_deleted,
-    deletedAt: r.deleted_at,
-    deletedBy: r.deleted_by,
-    deleteReason: r.delete_reason,
-    version: r.version,
-    createdAt: r.created_at,
-    createdBy: r.created_by,
-    updatedAt: r.updated_at,
-    updatedBy: r.updated_by,
+    closedDate: doc.closedDate ?? null,
+    closedAt: doc.closedAt ?? null,
+    closedBy: doc.closedBy ?? null,
+    closingRemark: doc.closingRemark ?? null,
+    isDeleted: !!doc.isDeleted,
+    deletedAt: doc.deletedAt ?? null,
+    deletedBy: doc.deletedBy ?? null,
+    deleteReason: doc.deleteReason ?? null,
+    version: doc.version,
+    createdAt: doc.createdAt ?? null,
+    createdBy: doc.createdBy ?? null,
+    updatedAt: doc.updatedAt ?? null,
+    updatedBy: doc.updatedBy ?? null,
   };
 }
 
-function findRow(id) {
-  const n = Number(id);
-  if (!Number.isInteger(n) || n <= 0) return null;
-  return db.get(`${BASE_SELECT} WHERE e.id = @id`, { id: n, today: todayISO() }) || null;
+/** findOneAndUpdate returns either the document or { value } depending on driver version. */
+const updatedDoc = (result) => (result && Object.prototype.hasOwnProperty.call(result, 'value') ? result.value : result);
+
+async function findDoc(id) {
+  const _id = db.toObjectId(id);
+  if (!_id) return null;
+  return db.collections.entries().findOne({ _id });
 }
 
-function requireActiveRow(id) {
-  const row = findRow(id);
-  if (!row || row.is_deleted) throw new HttpError(404, 'Entry not found.');
-  return row;
+async function requireActiveDoc(id) {
+  const doc = await findDoc(id);
+  if (!doc || doc.isDeleted) throw new HttpError(404, 'Entry not found.');
+  return doc;
 }
 
-function checkVersion(row, version) {
+function checkVersion(doc, version) {
   if (version === undefined || version === null || version === '') return;
-  if (Number(version) !== row.version) {
+  if (Number(version) !== doc.version) {
     throw new HttpError(
       409,
-      `${row.srn} was changed by someone else a moment ago. Please close this window and open the entry again.`,
+      `${doc.srn} was changed by someone else a moment ago. Please close this window and open the entry again.`,
       { code: 'VERSION_CONFLICT' }
     );
   }
@@ -96,87 +101,69 @@ function checkVersion(row, version) {
 // Reads
 // ---------------------------------------------------------------------------
 
-function getEntry(id, { includeDeleted = false } = {}) {
-  const row = findRow(id);
-  if (!row || (row.is_deleted && !includeDeleted)) return null;
-  return mapEntry(row);
+async function getEntry(id, { includeDeleted = false } = {}) {
+  const doc = await findDoc(id);
+  if (!doc || (doc.isDeleted && !includeDeleted)) return null;
+  return mapEntry(doc, todayISO());
 }
 
-function listEntries(query = {}) {
+async function listEntries(query = {}) {
   const today = todayISO();
-  const params = { today };
-  const where = [];
+  const filter = {};
 
   const requested = String(query.status || 'ALL').toUpperCase();
   const status = LIST_STATUSES.includes(requested) ? requested : 'ALL';
   if (status === 'DELETED') {
-    where.push('e.is_deleted = 1');
+    filter.isDeleted = true;
   } else {
-    where.push('e.is_deleted = 0');
-    if (status !== 'ALL') {
-      where.push('e.status = @status');
-      params.status = status;
-    }
+    filter.isDeleted = false;
+    if (status !== 'ALL') filter.status = status;
   }
 
   // One search box: SRN, name or particulars. "SRN-001", "srn 1" or "SRN001" find exactly that record.
   const q = cleanText(query.q);
   const srnNo = parseSrn(q);
   if (srnNo !== null) {
-    params.srnNo = srnNo;
-    where.push('e.srn_no = @srnNo');
+    filter.srnNo = srnNo;
   } else if (q) {
-    params.q = `%${escapeLike(q)}%`;
-    where.push("(e.srn LIKE @q ESCAPE '\\' OR e.whom LIKE @q ESCAPE '\\' OR e.particulars LIKE @q ESCAPE '\\')");
+    const rx = new RegExp(escapeRegex(q), 'i');
+    filter.$or = [{ srn: rx }, { whom: rx }, { particulars: rx }];
   }
 
   const whom = cleanText(query.whom);
-  if (whom) {
-    params.whom = whom;
-    where.push('e.whom = @whom COLLATE NOCASE');
-  }
+  if (whom) filter.whomLower = whom.toLowerCase();
 
-  const dateColumn = query.dateField === 'closed' ? 'e.closed_date' : 'e.entry_date';
-  if (isValidISODate(query.dateFrom)) {
-    params.dateFrom = query.dateFrom;
-    where.push(`${dateColumn} >= @dateFrom`);
-  }
-  if (isValidISODate(query.dateTo)) {
-    params.dateTo = query.dateTo;
-    where.push(`${dateColumn} <= @dateTo`);
-  }
+  const dateField = query.dateField === 'closed' ? 'closedDate' : 'entryDate';
+  const dateRange = {};
+  if (isValidISODate(query.dateFrom)) dateRange.$gte = query.dateFrom;
+  if (isValidISODate(query.dateTo)) dateRange.$lte = query.dateTo;
+  if (Object.keys(dateRange).length) filter[dateField] = dateRange;
 
+  const amountRange = {};
+  const amountMin = parseAmountToPaise(query.amountMin);
+  if (query.amountMin && amountMin !== null) amountRange.$gte = amountMin;
+  const amountMax = parseAmountToPaise(query.amountMax);
+  if (query.amountMax && amountMax !== null) amountRange.$lte = amountMax;
+  if (Object.keys(amountRange).length) filter.amountPaise = amountRange;
+
+  const docs = await db.collections.entries().find(filter).sort({ srnNo: -1 }).toArray();
+  let entries = docs.map((doc) => mapEntry(doc, today));
+
+  // Age depends on today (open entries) or the closing date (closed ones), so it is applied here.
   const bucket = AGE_BUCKETS.find((b) => b.key === query.age);
   if (bucket) {
-    params.ageMin = bucket.min;
-    where.push(`${AGE_SQL} >= @ageMin`);
-    if (bucket.max !== null) {
-      params.ageMax = bucket.max;
-      where.push(`${AGE_SQL} <= @ageMax`);
-    }
+    entries = entries.filter((e) => e.ageDays >= bucket.min && (bucket.max === null || e.ageDays <= bucket.max));
   }
 
-  const amountMin = parseAmountToPaise(query.amountMin);
-  if (query.amountMin && amountMin !== null) {
-    params.amountMin = amountMin;
-    where.push('e.amount_paise >= @amountMin');
-  }
-  const amountMax = parseAmountToPaise(query.amountMax);
-  if (query.amountMax && amountMax !== null) {
-    params.amountMax = amountMax;
-    where.push('e.amount_paise <= @amountMax');
-  }
-
-  const rows = db.all(`${BASE_SELECT} WHERE ${where.join(' AND ')} ORDER BY e.srn_no DESC`, params);
-  const entries = rows.map(mapEntry);
   const amountPaise = entries.reduce((sum, e) => sum + e.amountPaise, 0);
   return { today, status, entries, totals: { count: entries.length, amountPaise } };
 }
 
-/** Everything the dashboard needs, computed from live (non-deleted) rows. */
-function dashboardSummary() {
+/** Everything the dashboard needs, calculated from the live (non-deleted) entries. */
+async function dashboardSummary() {
   const today = todayISO();
-  const entries = db.all(`${BASE_SELECT} WHERE e.is_deleted = 0`, { today }).map(mapEntry);
+  const docs = await db.collections.entries().find({ isDeleted: false }).toArray();
+  const entries = docs.map((doc) => mapEntry(doc, today));
 
   const blank = (name) => ({
     name,
@@ -236,17 +223,20 @@ function dashboardSummary() {
 }
 
 /** Names and particulars already in use, for type-ahead suggestions and the Given To filter. */
-function lookups() {
+async function lookups() {
   const uniq = (values) => {
     const seen = new Map();
     values.forEach((v) => {
-      const key = v.toLowerCase();
+      const key = String(v).toLowerCase();
       if (!seen.has(key)) seen.set(key, v);
     });
     return [...seen.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   };
-  const persons = db.all('SELECT DISTINCT whom AS v FROM entries WHERE is_deleted = 0').map((r) => r.v);
-  const used = db.all('SELECT DISTINCT particulars AS v FROM entries WHERE is_deleted = 0').map((r) => r.v);
+  const entries = db.collections.entries();
+  const [persons, used] = await Promise.all([
+    entries.distinct('whom', { isDeleted: false }),
+    entries.distinct('particulars', { isDeleted: false }),
+  ]);
   return {
     persons: uniq(persons),
     suggestedParticulars: uniq([...DEFAULT_PARTICULARS, ...used]),
@@ -254,9 +244,8 @@ function lookups() {
 }
 
 /** SRN the next new entry will receive (shown read-only in the Add form). */
-function nextSrn() {
-  const { n } = db.get('SELECT COALESCE(MAX(srn_no), 0) + 1 AS n FROM entries');
-  return formatSrn(n);
+async function nextSrn() {
+  return formatSrn(await db.peekSrnNumber());
 }
 
 // ---------------------------------------------------------------------------
@@ -294,192 +283,233 @@ function validateEntryInput(body, today) {
 }
 
 /** Reuse the existing spelling of a name/particular so "ashok" and "Ashok" group together. */
-function canonicalSpelling(column, value, excludeId = 0) {
-  if (!['whom', 'particulars'].includes(column)) throw new Error('Invalid column');
-  const row = db.get(
-    `SELECT ${column} AS v FROM entries
-      WHERE ${column} = @value COLLATE NOCASE AND id != @excludeId AND is_deleted = 0
-      ORDER BY id LIMIT 1`,
-    { value, excludeId }
-  );
-  if (row) return row.v;
-  if (column === 'particulars') {
+async function canonicalSpelling(field, value, excludeId = null) {
+  if (!['whom', 'particulars'].includes(field)) throw new Error('Invalid field');
+  const filter = { [`${field}Lower`]: value.toLowerCase(), isDeleted: false };
+  if (excludeId) filter._id = { $ne: excludeId };
+  const doc = await db.collections.entries().find(filter).sort({ _id: 1 }).limit(1).next();
+  if (doc) return doc[field];
+  if (field === 'particulars') {
     const standard = DEFAULT_PARTICULARS.find((p) => p.toLowerCase() === value.toLowerCase());
     if (standard) return standard;
   }
   return value;
 }
 
-function createEntry(body, user) {
+async function createEntry(body, user) {
   const input = validateEntryInput(body, todayISO());
-  input.whom = canonicalSpelling('whom', input.whom);
-  input.particulars = canonicalSpelling('particulars', input.particulars);
+  input.whom = await canonicalSpelling('whom', input.whom);
+  input.particulars = await canonicalSpelling('particulars', input.particulars);
 
-  return db.transaction(() => {
-    const { n: srnNo } = db.get('SELECT COALESCE(MAX(srn_no), 0) + 1 AS n FROM entries');
-    const srn = formatSrn(srnNo);
-    const { lastId } = db.run(
-      `INSERT INTO entries (srn_no, srn, entry_date, whom, particulars, amount_paise, remark,
-                            status, created_at, created_by, created_by_user_id)
-       VALUES (@srnNo, @srn, @entryDate, @whom, @particulars, @amountPaise, @remark,
-               'OPEN', @now, @by, @byId)`,
-      {
-        ...input,
-        srnNo,
-        srn,
-        now: nowTimestamp(),
-        by: user ? user.displayName : 'System',
-        byId: user ? user.id : null,
-      }
-    );
-    audit.logAction({ entryId: lastId, action: 'CREATE', details: { srn, ...input }, user });
-    return getEntry(lastId);
-  });
+  const srnNo = await db.nextSrnNumber();
+  const srn = formatSrn(srnNo);
+  const now = new Date();
+  const doc = {
+    srnNo,
+    srn,
+    entryDate: input.entryDate,
+    whom: input.whom,
+    whomLower: input.whom.toLowerCase(),
+    particulars: input.particulars,
+    particularsLower: input.particulars.toLowerCase(),
+    amountPaise: input.amountPaise,
+    remark: input.remark,
+    status: 'OPEN',
+    closedDate: null,
+    closedAt: null,
+    closedBy: null,
+    closedByUserId: null,
+    closingRemark: null,
+    isDeleted: false,
+    deletedAt: null,
+    deletedBy: null,
+    deleteReason: null,
+    version: 1,
+    createdAt: now,
+    createdBy: user ? user.displayName : 'System',
+    createdByUserId: user ? user.id : null,
+    updatedAt: null,
+    updatedBy: null,
+  };
+  const { insertedId } = await db.collections.entries().insertOne(doc);
+  await audit.logAction({ entryId: insertedId, action: 'CREATE', details: { srn, ...input }, user });
+  return mapEntry({ ...doc, _id: insertedId }, todayISO());
 }
 
-function updateEntry(id, body, user) {
-  const row = requireActiveRow(id);
-  if (row.status === 'CLOSED') {
-    throw new HttpError(409, `${row.srn} is closed and can no longer be edited.`);
-  }
-  checkVersion(row, body.version);
+async function updateEntry(id, body, user) {
+  const doc = await requireActiveDoc(id);
+  if (doc.status === 'CLOSED') throw new HttpError(409, `${doc.srn} is closed and can no longer be edited.`);
+  checkVersion(doc, body.version);
 
   const input = validateEntryInput(body, todayISO());
-  input.whom = canonicalSpelling('whom', input.whom, row.id);
-  input.particulars = canonicalSpelling('particulars', input.particulars, row.id);
+  input.whom = await canonicalSpelling('whom', input.whom, doc._id);
+  input.particulars = await canonicalSpelling('particulars', input.particulars, doc._id);
 
   const current = {
-    entryDate: row.entry_date,
-    whom: row.whom,
-    particulars: row.particulars,
-    amountPaise: row.amount_paise,
-    remark: row.remark,
+    entryDate: doc.entryDate,
+    whom: doc.whom,
+    particulars: doc.particulars,
+    amountPaise: doc.amountPaise,
+    remark: doc.remark ?? null,
   };
   const changes = {};
   for (const key of Object.keys(current)) {
     if ((current[key] ?? null) !== (input[key] ?? null)) changes[key] = { from: current[key], to: input[key] };
   }
-  if (Object.keys(changes).length === 0) return mapEntry(row);
+  if (Object.keys(changes).length === 0) return mapEntry(doc, todayISO());
 
-  return db.transaction(() => {
-    const { changes: updated } = db.run(
-      `UPDATE entries
-          SET entry_date = @entryDate, whom = @whom, particulars = @particulars,
-              amount_paise = @amountPaise, remark = @remark,
-              version = version + 1, updated_at = @now, updated_by = @by
-        WHERE id = @id AND version = @version AND status = 'OPEN' AND is_deleted = 0`,
-      { ...input, id: row.id, version: row.version, now: nowTimestamp(), by: user.displayName }
-    );
-    if (updated !== 1) throw new HttpError(409, 'Entry was changed by someone else. Please reload and try again.');
-    audit.logAction({ entryId: row.id, action: 'UPDATE', details: { srn: row.srn, changes }, user });
-    return getEntry(row.id);
-  });
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, version: doc.version, status: 'OPEN', isDeleted: false },
+    {
+      $set: {
+        entryDate: input.entryDate,
+        whom: input.whom,
+        whomLower: input.whom.toLowerCase(),
+        particulars: input.particulars,
+        particularsLower: input.particulars.toLowerCase(),
+        amountPaise: input.amountPaise,
+        remark: input.remark,
+        updatedAt: new Date(),
+        updatedBy: user.displayName,
+      },
+      $inc: { version: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+  const updated = updatedDoc(result);
+  if (!updated) throw new HttpError(409, 'Entry was changed by someone else. Please reload and try again.');
+  await audit.logAction({ entryId: doc._id, action: 'UPDATE', details: { srn: doc.srn, changes }, user });
+  return mapEntry(updated, todayISO());
 }
 
-function closeEntry(id, body, user) {
-  const row = requireActiveRow(id);
-  if (row.status === 'CLOSED') throw new HttpError(409, `${row.srn} is already closed.`);
-  checkVersion(row, body.version);
+async function closeEntry(id, body, user) {
+  const doc = await requireActiveDoc(id);
+  if (doc.status === 'CLOSED') throw new HttpError(409, `${doc.srn} is already closed.`);
+  checkVersion(doc, body.version);
 
   const closingRemark = cleanText(body.closingRemark);
   if (closingRemark.length > 500) {
     throw new HttpError(400, 'Closing remark is too long (max 500 characters).', { field: 'closingRemark' });
   }
   const today = todayISO();
-  const now = nowTimestamp();
-
-  return db.transaction(() => {
-    const { changes } = db.run(
-      `UPDATE entries
-          SET status = 'CLOSED', closed_date = @today, closed_at = @now, closed_by = @by,
-              closed_by_user_id = @byId, closing_remark = @closingRemark,
-              version = version + 1
-        WHERE id = @id AND status = 'OPEN' AND is_deleted = 0`,
-      { id: row.id, today, now, by: user.displayName, byId: user.id, closingRemark: closingRemark || null }
-    );
-    if (changes !== 1) throw new HttpError(409, `${row.srn} is already closed.`);
-    const entry = getEntry(row.id);
-    audit.logAction({
-      entryId: row.id,
-      action: 'CLOSE',
-      details: {
-        srn: row.srn,
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, status: 'OPEN', isDeleted: false },
+    {
+      $set: {
+        status: 'CLOSED',
         closedDate: today,
-        daysPending: entry.ageDays,
+        closedAt: new Date(),
+        closedBy: user.displayName,
+        closedByUserId: user.id,
         closingRemark: closingRemark || null,
       },
-      user,
-    });
-    return entry;
+      $inc: { version: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+  const closed = updatedDoc(result);
+  if (!closed) throw new HttpError(409, `${doc.srn} is already closed.`);
+  const entry = mapEntry(closed, today);
+  await audit.logAction({
+    entryId: doc._id,
+    action: 'CLOSE',
+    details: { srn: doc.srn, closedDate: today, daysPending: entry.ageDays, closingRemark: closingRemark || null },
+    user,
   });
+  return entry;
 }
 
-function reopenEntry(id, body, user) {
-  const row = requireActiveRow(id);
-  if (row.status !== 'CLOSED') throw new HttpError(409, `${row.srn} is not closed.`);
+async function reopenEntry(id, body, user) {
+  const doc = await requireActiveDoc(id);
+  if (doc.status !== 'CLOSED') throw new HttpError(409, `${doc.srn} is not closed.`);
   const reason = cleanText(body.reason);
   if (!reason) throw new HttpError(400, 'Enter the reason for reopening.', { field: 'reason' });
   if (reason.length > 500) throw new HttpError(400, 'Reason is too long (max 500 characters).', { field: 'reason' });
 
-  return db.transaction(() => {
-    db.run(
-      `UPDATE entries
-          SET status = 'OPEN', closed_date = NULL, closed_at = NULL, closed_by = NULL,
-              closed_by_user_id = NULL, closing_remark = NULL,
-              version = version + 1, updated_at = @now, updated_by = @by
-        WHERE id = @id`,
-      { id: row.id, now: nowTimestamp(), by: user.displayName }
-    );
-    audit.logAction({
-      entryId: row.id,
-      action: 'REOPEN',
-      details: {
-        srn: row.srn,
-        reason,
-        previous: { closedDate: row.closed_date, closedBy: row.closed_by, closingRemark: row.closing_remark },
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, status: 'CLOSED' },
+    {
+      $set: {
+        status: 'OPEN',
+        closedDate: null,
+        closedAt: null,
+        closedBy: null,
+        closedByUserId: null,
+        closingRemark: null,
+        updatedAt: new Date(),
+        updatedBy: user.displayName,
       },
-      user,
-    });
-    return getEntry(row.id);
+      $inc: { version: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+  const reopened = updatedDoc(result);
+  if (!reopened) throw new HttpError(409, `${doc.srn} is not closed.`);
+  await audit.logAction({
+    entryId: doc._id,
+    action: 'REOPEN',
+    details: {
+      srn: doc.srn,
+      reason,
+      previous: { closedDate: doc.closedDate, closedBy: doc.closedBy, closingRemark: doc.closingRemark },
+    },
+    user,
   });
+  return mapEntry(reopened, todayISO());
 }
 
-function deleteEntry(id, body, user) {
-  const row = requireActiveRow(id);
+async function deleteEntry(id, body, user) {
+  const doc = await requireActiveDoc(id);
   const reason = cleanText(body.reason);
   if (!reason) throw new HttpError(400, 'Enter the reason for deleting this entry.', { field: 'reason' });
   if (reason.length > 500) throw new HttpError(400, 'Reason is too long (max 500 characters).', { field: 'reason' });
 
-  return db.transaction(() => {
-    const now = nowTimestamp();
-    db.run(
-      `UPDATE entries
-          SET is_deleted = 1, deleted_at = @now, deleted_by = @by, delete_reason = @reason,
-              version = version + 1, updated_at = @now, updated_by = @by
-        WHERE id = @id`,
-      { id: row.id, now, by: user.displayName, reason }
-    );
-    audit.logAction({ entryId: row.id, action: 'DELETE', details: { srn: row.srn, reason }, user });
-    return getEntry(row.id, { includeDeleted: true });
-  });
+  const now = new Date();
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, isDeleted: false },
+    {
+      $set: {
+        isDeleted: true,
+        deletedAt: now,
+        deletedBy: user.displayName,
+        deleteReason: reason,
+        updatedAt: now,
+        updatedBy: user.displayName,
+      },
+      $inc: { version: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+  const deleted = updatedDoc(result);
+  if (!deleted) throw new HttpError(409, `${doc.srn} is already deleted.`);
+  await audit.logAction({ entryId: doc._id, action: 'DELETE', details: { srn: doc.srn, reason }, user });
+  return mapEntry(deleted, todayISO());
 }
 
-function restoreEntry(id, user) {
-  const row = findRow(id);
-  if (!row) throw new HttpError(404, 'Entry not found.');
-  if (!row.is_deleted) throw new HttpError(409, `${row.srn} is not deleted.`);
+async function restoreEntry(id, user) {
+  const doc = await findDoc(id);
+  if (!doc) throw new HttpError(404, 'Entry not found.');
+  if (!doc.isDeleted) throw new HttpError(409, `${doc.srn} is not deleted.`);
 
-  return db.transaction(() => {
-    db.run(
-      `UPDATE entries
-          SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL, delete_reason = NULL,
-              version = version + 1, updated_at = @now, updated_by = @by
-        WHERE id = @id`,
-      { id: row.id, now: nowTimestamp(), by: user.displayName }
-    );
-    audit.logAction({ entryId: row.id, action: 'RESTORE', details: { srn: row.srn }, user });
-    return getEntry(row.id);
-  });
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, isDeleted: true },
+    {
+      $set: {
+        isDeleted: false,
+        deletedAt: null,
+        deletedBy: null,
+        deleteReason: null,
+        updatedAt: new Date(),
+        updatedBy: user.displayName,
+      },
+      $inc: { version: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+  const restored = updatedDoc(result);
+  if (!restored) throw new HttpError(409, `${doc.srn} is not deleted.`);
+  await audit.logAction({ entryId: doc._id, action: 'RESTORE', details: { srn: doc.srn }, user });
+  return mapEntry(restored, todayISO());
 }
 
 module.exports = {

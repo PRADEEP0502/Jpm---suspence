@@ -5,37 +5,33 @@
  *
  *   npm start            -> http://localhost:3000  (also reachable from other office PCs on the LAN)
  *
- * Configuration (environment variables, all optional):
- *   PORT                   default 3000
- *   HOST                   default 0.0.0.0 (all network interfaces)
- *   APP_TIMEZONE           default Asia/Kolkata - used for "today" and age calculation
- *   SEED_SAMPLE_DATA       default true - add the 4 sample entries when the database is first created
- *   ADMIN_USERNAME / ADMIN_PASSWORD  initial admin login (default admin / Admin@123, must be changed on first login)
- *   DATA_DIR               default ./data
- *   SESSION_HOURS          default 12
- *   COOKIE_SECURE          default false - set true when served over HTTPS
+ * Data is stored in MongoDB (Atlas or any MongoDB server). The connection string lives in .env,
+ * which is never committed - copy .env.example to .env and fill in your details.
+ *
+ * Optional settings (environment variables or .env): PORT, HOST, APP_TIMEZONE, MONGODB_DB,
+ * SEED_SAMPLE_DATA, ADMIN_USERNAME, ADMIN_PASSWORD, SESSION_HOURS, COOKIE_SECURE,
+ * BACKUP_DIR, BACKUP_KEEP_DAYS, AUTO_BACKUP.
  */
 
 const os = require('os');
 const path = require('path');
 const express = require('express');
 
+const config = require('./src/config');
 const db = require('./src/db');
 const auth = require('./src/auth');
 const entries = require('./src/entries');
 const users = require('./src/users');
 const audit = require('./src/audit');
+const backup = require('./src/backup');
 const { seedSampleData } = require('./src/seed');
 const { HttpError, AGE_BUCKETS, DEFAULT_PARTICULARS, TIMEZONE, todayISO } = require('./src/util');
 
-const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
-const SEED_SAMPLE_DATA = String(process.env.SEED_SAMPLE_DATA || 'true').toLowerCase() !== 'false';
-
-const wrap = (fn) => (req, res, next) => {
+/** Wrap a route handler: send whatever it returns as JSON, and pass errors to the error handler. */
+const wrap = (fn) => async (req, res, next) => {
   try {
-    const result = fn(req, res);
-    if (result !== undefined) res.json(result);
+    const result = await fn(req, res);
+    if (result !== undefined && !res.headersSent) res.json(result);
   } catch (err) {
     next(err);
   }
@@ -82,13 +78,13 @@ function buildApp() {
 
   api.post(
     '/auth/login',
-    wrap((req, res) => ({ user: auth.login(req, res, req.body.username, req.body.password) }))
+    wrap(async (req, res) => ({ user: await auth.login(req, res, req.body.username, req.body.password) }))
   );
 
   api.post(
     '/auth/logout',
-    wrap((req, res) => {
-      auth.destroySession(req, res);
+    wrap(async (req, res) => {
+      await auth.destroySession(req, res);
       return { ok: true };
     })
   );
@@ -96,7 +92,7 @@ function buildApp() {
   api.post(
     '/auth/change-password',
     (req, _res, next) => (req.user ? next() : next(new HttpError(401, 'Please log in to continue.'))),
-    wrap((req) => ({ user: auth.changePassword(req, req.body.currentPassword, req.body.newPassword) }))
+    wrap(async (req) => ({ user: await auth.changePassword(req, req.body.currentPassword, req.body.newPassword) }))
   );
 
   // Dashboard data (everyone, view-only)
@@ -115,55 +111,63 @@ function buildApp() {
     })
   );
 
-  api.get('/entries/next-srn', auth.requireLogin, wrap(() => ({ srn: entries.nextSrn() })));
+  api.get('/entries/next-srn', auth.requireLogin, wrap(async () => ({ srn: await entries.nextSrn() })));
 
   api.get(
     '/entries/:id',
-    wrap((req) => {
+    wrap(async (req) => {
       const isAdmin = req.user && req.user.role === 'ADMIN';
-      const entry = entries.getEntry(req.params.id, { includeDeleted: isAdmin });
+      const entry = await entries.getEntry(req.params.id, { includeDeleted: isAdmin });
       if (!entry) throw new HttpError(404, 'Entry not found.');
       // Change history is shown to logged-in staff only.
-      const history = req.user ? audit.historyForEntry(entry.id) : undefined;
+      const history = req.user ? await audit.historyForEntry(entry.id) : undefined;
       return { entry, history };
     })
   );
 
-  api.post('/entries', auth.requireLogin, wrap((req) => ({ entry: entries.createEntry(req.body, req.user) })));
+  api.post(
+    '/entries',
+    auth.requireLogin,
+    wrap(async (req) => ({ entry: await entries.createEntry(req.body, req.user) }))
+  );
   api.put(
     '/entries/:id',
     auth.requireLogin,
-    wrap((req) => ({ entry: entries.updateEntry(req.params.id, req.body, req.user) }))
+    wrap(async (req) => ({ entry: await entries.updateEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/close',
     auth.requireLogin,
-    wrap((req) => ({ entry: entries.closeEntry(req.params.id, req.body, req.user) }))
+    wrap(async (req) => ({ entry: await entries.closeEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/reopen',
     auth.requireAdmin,
-    wrap((req) => ({ entry: entries.reopenEntry(req.params.id, req.body, req.user) }))
+    wrap(async (req) => ({ entry: await entries.reopenEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/delete',
     auth.requireAdmin,
-    wrap((req) => ({ entry: entries.deleteEntry(req.params.id, req.body, req.user) }))
+    wrap(async (req) => ({ entry: await entries.deleteEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/restore',
     auth.requireAdmin,
-    wrap((req) => ({ entry: entries.restoreEntry(req.params.id, req.user) }))
+    wrap(async (req) => ({ entry: await entries.restoreEntry(req.params.id, req.user) }))
   );
 
   // User management (admin)
-  api.get('/users', auth.requireAdmin, wrap(() => ({ users: users.listUsers() })));
-  api.post('/users', auth.requireAdmin, wrap((req) => ({ user: users.createUser(req.body, req.user) })));
-  api.put('/users/:id', auth.requireAdmin, wrap((req) => ({ user: users.updateUser(req.params.id, req.body, req.user) })));
+  api.get('/users', auth.requireAdmin, wrap(async () => ({ users: await users.listUsers() })));
+  api.post('/users', auth.requireAdmin, wrap(async (req) => ({ user: await users.createUser(req.body, req.user) })));
+  api.put(
+    '/users/:id',
+    auth.requireAdmin,
+    wrap(async (req) => ({ user: await users.updateUser(req.params.id, req.body, req.user) }))
+  );
   api.post(
     '/users/:id/reset-password',
     auth.requireAdmin,
-    wrap((req) => ({ user: users.resetPassword(req.params.id, req.body, req.user) }))
+    wrap(async (req) => ({ user: await users.resetPassword(req.params.id, req.body, req.user) }))
   );
 
   api.use((_req, _res, next) => next(new HttpError(404, 'Not found.')));
@@ -205,20 +209,34 @@ function lanAddresses() {
 }
 
 async function main() {
-  const { isNew, file } = await db.openDatabase();
-  const admin = users.ensureDefaultAdmin();
-  if (isNew && SEED_SAMPLE_DATA) {
-    const n = seedSampleData();
-    console.log(`[setup] Added ${n} sample suspense entries.`);
+  let info;
+  try {
+    info = await db.openDatabase();
+  } catch (err) {
+    console.error('\n  Could not connect to the database.\n');
+    console.error(`  ${err.message}\n`);
+    console.error('  Things to check:');
+    console.error('   - .env has the correct MONGODB_URI (user name, password, cluster)');
+    console.error('   - in MongoDB Atlas, Network Access allows this computer’s IP address');
+    console.error('   - this computer is online\n');
+    process.exit(1);
   }
 
-  buildApp().listen(PORT, HOST, () => {
+  const admin = await users.ensureDefaultAdmin();
+  if (info.isNew && config.SEED_SAMPLE_DATA) {
+    const n = await seedSampleData();
+    console.log(`[setup] Added ${n} sample suspense entries.`);
+  }
+  await db.syncSrnCounter();
+  backup.startDailyBackups();
+
+  buildApp().listen(config.PORT, config.HOST, () => {
     console.log('');
     console.log('  JPM Suspense Amount Dashboard is running');
-    console.log(`  Database : ${file}`);
+    console.log(`  Database : ${info.name} on ${info.host}`);
     console.log(`  Today    : ${todayISO()} (${TIMEZONE})`);
-    console.log(`  Open     : http://localhost:${PORT}`);
-    lanAddresses().forEach((ip) => console.log(`  Network  : http://${ip}:${PORT}`));
+    console.log(`  Open     : http://localhost:${config.PORT}`);
+    lanAddresses().forEach((ip) => console.log(`  Network  : http://${ip}:${config.PORT}`));
     if (admin) {
       console.log('');
       console.log(`  First-time admin login  ->  ID: ${admin.username}   Password: ${admin.password}`);
