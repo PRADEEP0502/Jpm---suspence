@@ -68,7 +68,7 @@ export function render(main, params) {
                   <a class="row-link" href="${href}" ${isSel ? html`aria-current="true"` : ''}>${p.name}</a>
                   <div class="cell-sub">
                     ${plural(p.totalCount, 'entry', 'entries')}${p.openCount
-                      ? ` · oldest pending ${fmtDays(p.oldestOpenDays)}`
+                      ? ` · longest waiting ${fmtDays(p.oldestOpenDays)}`
                       : ''}
                   </div>
                 </div></td>
@@ -118,7 +118,7 @@ export function render(main, params) {
         <div class="card-meta">${plural(p.totalCount, 'entry', 'entries')}</div>
       </div>
       <div class="card">
-        <div class="card-label">Oldest Pending</div>
+        <div class="card-label">Longest Waiting</div>
         <div class="card-value">${p.openCount ? fmtDays(p.oldestOpenDays) : '—'}</div>
         <div class="card-meta">${p.openCount ? 'since the amount was given' : 'Nothing pending'}</div>
       </div>

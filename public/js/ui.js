@@ -42,7 +42,7 @@ export function summaryCards(c) {
     ${card(
       'Open Entries',
       c.openCount,
-      c.openCount ? `Oldest pending: ${fmtDays(c.oldestOpenDays)}` : 'Nothing pending'
+      c.openCount ? `Longest waiting: ${fmtDays(c.oldestOpenDays)}` : 'Nothing pending'
     )}
   </div>`;
 }
