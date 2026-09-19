@@ -24,8 +24,11 @@ const entries = require('./src/entries');
 const users = require('./src/users');
 const audit = require('./src/audit');
 const backup = require('./src/backup');
+const events = require('./src/events');
 const { seedSampleData } = require('./src/seed');
 const { HttpError, AGE_BUCKETS, DEFAULT_PARTICULARS, TIMEZONE, todayISO } = require('./src/util');
+
+const startedAt = new Date();
 
 /** Wrap a route handler: send whatever it returns as JSON, and pass errors to the error handler. */
 const wrap = (fn) => async (req, res, next) => {
@@ -36,6 +39,14 @@ const wrap = (fn) => async (req, res, next) => {
     next(err);
   }
 };
+
+/** Same as wrap(), but also tells every open screen that the data changed. */
+const wrapWrite = (fn) =>
+  wrap(async (req, res) => {
+    const result = await fn(req, res);
+    events.notifyChanged();
+    return result;
+  });
 
 function buildApp() {
   const app = express();
@@ -63,6 +74,28 @@ function buildApp() {
     res.setHeader('Cache-Control', 'no-store');
     next();
   });
+
+  /** Is the app connected to the database? Useful for monitoring and for checking a new setup. */
+  api.get(
+    '/health',
+    wrap(async () => {
+      const ping = await db.ping();
+      return {
+        ok: ping.connected,
+        database: config.MONGODB_DB,
+        connected: ping.connected,
+        responseMs: ping.responseMs,
+        error: ping.error,
+        entries: ping.connected ? await db.collections.entries().countDocuments({ isDeleted: false }) : null,
+        liveScreens: events.clientCount(),
+        today: todayISO(),
+        startedAt: startedAt.toISOString(),
+      };
+    })
+  );
+
+  /** Live updates: the browser keeps this open and is told whenever entries change. */
+  api.get('/events', (req, res) => events.addClient(req, res));
 
   // Session & app configuration
   api.get(
@@ -128,32 +161,32 @@ function buildApp() {
   api.post(
     '/entries',
     auth.requireLogin,
-    wrap(async (req) => ({ entry: await entries.createEntry(req.body, req.user) }))
+    wrapWrite(async (req) => ({ entry: await entries.createEntry(req.body, req.user) }))
   );
   api.put(
     '/entries/:id',
     auth.requireLogin,
-    wrap(async (req) => ({ entry: await entries.updateEntry(req.params.id, req.body, req.user) }))
+    wrapWrite(async (req) => ({ entry: await entries.updateEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/close',
     auth.requireLogin,
-    wrap(async (req) => ({ entry: await entries.closeEntry(req.params.id, req.body, req.user) }))
+    wrapWrite(async (req) => ({ entry: await entries.closeEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/reopen',
     auth.requireAdmin,
-    wrap(async (req) => ({ entry: await entries.reopenEntry(req.params.id, req.body, req.user) }))
+    wrapWrite(async (req) => ({ entry: await entries.reopenEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/delete',
     auth.requireAdmin,
-    wrap(async (req) => ({ entry: await entries.deleteEntry(req.params.id, req.body, req.user) }))
+    wrapWrite(async (req) => ({ entry: await entries.deleteEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/entries/:id/restore',
     auth.requireAdmin,
-    wrap(async (req) => ({ entry: await entries.restoreEntry(req.params.id, req.user) }))
+    wrapWrite(async (req) => ({ entry: await entries.restoreEntry(req.params.id, req.user) }))
   );
 
   // User management (admin)
@@ -230,10 +263,14 @@ async function main() {
   await db.syncSrnCounter();
   backup.startDailyBackups();
 
-  buildApp().listen(config.PORT, config.HOST, () => {
+  // Changes made by another server (or directly in Atlas) also reach every open screen.
+  const live = db.watchEntries(() => events.notifyChanged('database'));
+
+  const server = buildApp().listen(config.PORT, config.HOST, () => {
     console.log('');
     console.log('  JPM Suspense Amount Dashboard is running');
     console.log(`  Database : ${info.name} on ${info.host}`);
+    console.log(`  Live     : ${live ? 'on (screens update as soon as anyone saves)' : 'on (this server only)'}`);
     console.log(`  Today    : ${todayISO()} (${TIMEZONE})`);
     console.log(`  Open     : http://localhost:${config.PORT}`);
     lanAddresses().forEach((ip) => console.log(`  Network  : http://${ip}:${config.PORT}`));
@@ -244,6 +281,23 @@ async function main() {
     }
     console.log('');
   });
+
+  // Close tidily on Ctrl+C or when Windows closes the window, so nothing is left half-written.
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n  Stopping (${signal})...`);
+    events.closeAll();
+    server.close();
+    try {
+      await db.closeDatabase();
+    } catch (_) {
+      /* ignore */
+    }
+    process.exit(0);
+  };
+  ['SIGINT', 'SIGTERM', 'SIGBREAK'].forEach((signal) => process.on(signal, () => shutdown(signal)));
 }
 
 if (require.main === module) {

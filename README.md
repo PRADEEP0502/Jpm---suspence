@@ -98,7 +98,9 @@ Every figure is calculated from the database each time the page loads. Nothing i
 | Age (open entry) | Today − Entry Date |
 | Age / Days Pending (closed entry) | Closed Date − Entry Date (fixed once closed) |
 
-"Today" uses Indian Standard Time. Pages refresh automatically every minute, so ages increase each day and changes made by other staff appear without reloading.
+"Today" uses Indian Standard Time, so every computer shows the same age.
+
+**Live updates:** as soon as anyone adds, edits or closes an entry, every open screen updates by itself within about a second — no refreshing. The header shows **Live** while that connection is up, and **Reconnecting…** if it drops (the page still refreshes every minute as a fallback, and reconnects on its own).
 
 **Age groups:**
 
@@ -203,15 +205,29 @@ public/                Browser application (index.html, css/, js/, js/pages/)
 
 **Lifecycle:** `OPEN → CLOSED` (Entry User or Administrator; closed date and closed-by set by the server). `CLOSED → OPEN` via Reopen (Administrator, reason required). Soft delete / restore (Administrator, reason required). Each change is applied as a single conditional MongoDB update, so two people acting at the same moment cannot both win.
 
+**Live updates** use a MongoDB change stream plus the app’s own write notifications, pushed to browsers over Server-Sent Events (`GET /api/events`). Changes made by another server — or directly in Atlas/Compass — therefore reach every screen too. If the database does not support change streams (a standalone mongod), the app falls back to its own notifications and the one-minute refresh.
+
 **Indexes** are created at start-up: unique `srn` and `srnNo`, `{isDeleted, status}`, `entryDate`, lower-cased name and particulars (for case-insensitive filters), unique `usernameLower`, and a TTL index that expires old sessions automatically.
 
 **Networks that block SRV lookups:** `mongodb+srv://` needs a DNS SRV record. If the network cannot resolve it, the server retries automatically using public DNS (8.8.8.8 / 1.1.1.1); set `DNS_SERVERS` to use different ones.
+
+### Checking the database connection
+
+Open **http://localhost:3000/api/health** (or `curl` it) at any time:
+
+```json
+{ "ok": true, "database": "jpm_suspense", "connected": true, "responseMs": 42, "entries": 4, "liveScreens": 2 }
+```
+
+`ok: false` means the server is running but cannot reach MongoDB — check the internet connection, the `MONGODB_URI` in `.env`, and Atlas Network Access.
+
+At start-up the server retries the connection a few times before giving up, and prints a plain-English message saying what to check. Ctrl+C (or closing the window) shuts it down tidily, closing the database connection.
 
 ### API (JSON, under `/api`)
 
 | Method & path | Access |
 |---------------|--------|
-| `GET /bootstrap`, `GET /dashboard`, `GET /lookups`, `GET /entries?status=ALL\|OPEN\|CLOSED&q=&whom=&age=&dateFrom=&dateTo=&dateField=entry\|closed&amountMin=&amountMax=`, `GET /entries/:id` | Everyone (read-only) |
+| `GET /health` (database status), `GET /events` (live updates stream), `GET /bootstrap`, `GET /dashboard`, `GET /lookups`, `GET /entries?status=ALL\|OPEN\|CLOSED&q=&whom=&age=&dateFrom=&dateTo=&dateField=entry\|closed&amountMin=&amountMax=`, `GET /entries/:id` | Everyone (read-only) |
 | `POST /auth/login`, `POST /auth/logout`, `POST /auth/change-password` | — |
 | `GET /entries/next-srn`, `POST /entries`, `PUT /entries/:id`, `POST /entries/:id/close` | Entry User, Administrator |
 | `POST /entries/:id/reopen`, `POST /entries/:id/delete`, `POST /entries/:id/restore`, `GET /entries?status=DELETED`, `GET/POST /users`, `PUT /users/:id`, `POST /users/:id/reset-password` | Administrator |

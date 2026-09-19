@@ -1,6 +1,6 @@
 // App shell: session bootstrap, header, navigation, hash router and auto-refresh.
 
-import { html, setHtml, $, api, toast, onUnauthorized, isModalOpen, closeAllModals, fmtDate } from './lib.js';
+import { html, setHtml, $, api, toast, onUnauthorized, isModalOpen, closeAllModals, fmtDate, debounce } from './lib.js';
 import { state, isLoggedIn, isAdmin, roleLabel, setViewRefresher, setToday } from './state.js';
 import { showChangePassword } from './dialogs.js';
 import * as dashboardPage from './pages/dashboard.js';
@@ -176,6 +176,35 @@ onUnauthorized((err) => {
 });
 
 // ---------------------------------------------------------------------------
+// Live updates: the server tells us as soon as anyone adds, edits or closes an entry.
+// ---------------------------------------------------------------------------
+
+function setLiveStatus(state_) {
+  const el = $('#liveStatus');
+  if (!el) return;
+  const label = { live: 'Live', offline: 'Reconnecting…' }[state_] || '';
+  el.className = `live-chip live-chip--${state_}`;
+  el.textContent = label;
+  el.title =
+    state_ === 'live'
+      ? 'Connected — this screen updates as soon as anyone saves a change'
+      : 'Connection lost — trying to reconnect; the screen still refreshes every minute';
+}
+
+function startLiveUpdates() {
+  if (typeof EventSource === 'undefined') return; // very old browser: the periodic refresh covers it
+  const refreshSoon = debounce(() => {
+    if (document.visibilityState === 'visible' && !isModalOpen()) refreshCurrent();
+  }, 400);
+
+  const source = new EventSource('/api/events');
+  source.addEventListener('ready', () => setLiveStatus('live'));
+  source.addEventListener('changed', refreshSoon);
+  source.onopen = () => setLiveStatus('live');
+  source.onerror = () => setLiveStatus('offline'); // EventSource reconnects on its own
+}
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 
@@ -211,6 +240,8 @@ async function start() {
   window.addEventListener('hashchange', route);
   route();
   if (state.user && state.user.mustChangePassword) promptForcedPasswordChange();
+
+  startLiveUpdates();
 
   // Keep the screen current: ages grow daily and other staff may change entries.
   setInterval(async () => {

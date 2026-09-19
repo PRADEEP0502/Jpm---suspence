@@ -19,6 +19,7 @@ const config = require('./config');
 
 let client = null;
 let db = null;
+let healthy = false;
 
 const collections = {
   entries: () => db.collection('entries'),
@@ -32,10 +33,42 @@ const isDnsFailure = (err) =>
   /querySrv|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|ESERVFAIL|getaddrinfo/i.test(`${err.code || ''} ${err.message || ''}`);
 
 async function connect(uri) {
-  const c = new MongoClient(uri, { serverSelectionTimeoutMS: 20000, retryWrites: true });
+  const c = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 20000,
+    connectTimeoutMS: 20000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 20,
+    retryWrites: true,
+    retryReads: true,
+  });
   await c.connect();
   await c.db(config.MONGODB_DB).command({ ping: 1 });
   return c;
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Connect, retrying a few times so a brief network hiccup at start-up is not fatal. */
+async function connectWithRetry(uri, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await connect(uri);
+    } catch (err) {
+      lastError = err;
+      if (isDnsFailure(err) && config.DNS_FALLBACK.length && attempt === 1) {
+        // The system resolver could not look up the cluster; try public DNS servers instead.
+        console.warn('[db] System DNS could not find the cluster; retrying via', config.DNS_FALLBACK.join(', '));
+        dns.setServers([...config.DNS_FALLBACK, ...dns.getServers()]);
+        continue;
+      }
+      if (attempt < attempts) {
+        console.warn(`[db] Connection attempt ${attempt} failed (${err.message.split('\n')[0]}); retrying...`);
+        await wait(2000 * attempt);
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function openDatabase() {
@@ -47,17 +80,16 @@ async function openDatabase() {
     );
   }
 
-  try {
-    client = await connect(config.MONGODB_URI);
-  } catch (err) {
-    if (!isDnsFailure(err) || !config.DNS_FALLBACK.length) throw err;
-    // The system resolver could not look up the cluster; try public DNS servers instead.
-    console.warn('[db] System DNS could not find the cluster; retrying via', config.DNS_FALLBACK.join(', '));
-    dns.setServers([...config.DNS_FALLBACK, ...dns.getServers()]);
-    client = await connect(config.MONGODB_URI);
-  }
+  client = await connectWithRetry(config.MONGODB_URI);
+  client.on('serverHeartbeatFailed', () => {
+    healthy = false;
+  });
+  client.on('serverHeartbeatSucceeded', () => {
+    healthy = true;
+  });
 
   db = client.db(config.MONGODB_DB);
+  healthy = true;
   await ensureIndexes();
   const isNew =
     (await collections.entries().countDocuments({}, { limit: 1 })) === 0 &&
@@ -89,9 +121,56 @@ async function ensureIndexes() {
 }
 
 async function closeDatabase() {
+  if (changeStream) {
+    try {
+      await changeStream.close();
+    } catch (_) {
+      /* ignore */
+    }
+    changeStream = null;
+  }
   if (client) await client.close();
   client = null;
   db = null;
+  healthy = false;
+}
+
+/** Is the database reachable right now? Used by /api/health. */
+async function ping() {
+  if (!db) return { connected: false, error: 'Not connected' };
+  const started = Date.now();
+  try {
+    await db.command({ ping: 1 });
+    healthy = true;
+    return { connected: true, responseMs: Date.now() - started };
+  } catch (err) {
+    healthy = false;
+    return { connected: false, error: err.message.split('\n')[0] };
+  }
+}
+
+const isHealthy = () => healthy;
+
+let changeStream = null;
+
+/**
+ * Watch the entries collection so changes made anywhere (another server, Atlas, Compass)
+ * reach every open screen. Returns false when the server does not support change streams
+ * (a standalone mongod); the app then relies on its own notifications plus the periodic refresh.
+ */
+function watchEntries(onChange) {
+  try {
+    changeStream = collections.entries().watch([], { fullDocument: 'updateLookup' });
+    changeStream.on('change', (change) => onChange(change.operationType));
+    changeStream.on('error', (err) => {
+      console.warn('[db] Live change stream stopped:', err.message.split('\n')[0]);
+      changeStream = null;
+    });
+    return true;
+  } catch (err) {
+    console.warn('[db] Live change stream not available:', err.message.split('\n')[0]);
+    return false;
+  }
 }
 
 /** Next SRN number: atomic, so two people adding at the same moment can never get the same one. */
@@ -124,6 +203,9 @@ const toObjectId = (id) => {
 module.exports = {
   openDatabase,
   closeDatabase,
+  ping,
+  isHealthy,
+  watchEntries,
   collections,
   nextSrnNumber,
   peekSrnNumber,
