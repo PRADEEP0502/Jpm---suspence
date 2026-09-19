@@ -3,7 +3,8 @@ import { setToday } from '../state.js';
 import { summaryCards, groupTable, agingTiles } from '../ui.js';
 import { mountEntryList } from '../entry-list.js';
 
-export const OPEN_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'age', 'status'];
+export const PENDING_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
+// A closed entry has been returned in full, so Returned = Original and Balance = 0; no need for those columns.
 export const CLOSED_COLUMNS = [
   'srn',
   'originalDate',
@@ -33,7 +34,7 @@ export function render(main) {
         <div class="panel-head">
           <div>
             <h2 class="panel-title">Aging Summary</h2>
-            <div class="panel-sub">Open entries grouped by days pending. Click a group to list those entries.</div>
+            <div class="panel-sub">Outstanding balance grouped by days pending. Click a group to list those entries.</div>
           </div>
         </div>
         <div class="panel-body" data-role="aging"></div>
@@ -46,7 +47,7 @@ export function render(main) {
           <div class="panel-head">
             <div>
               <h2 class="panel-title">Person-wise Summary</h2>
-              <div class="panel-sub">Who holds how much suspense amount. Click a name to see their entries.</div>
+              <div class="panel-sub">Who still owes how much. Click a name to see their entries.</div>
             </div>
             <a class="btn btn--sm" href="#/persons">Person Summary</a>
           </div>
@@ -64,13 +65,13 @@ export function render(main) {
       </div>`
   );
 
-  // Only pending entries here; settled ones live in Closed History.
+  // Only entries with money still to come back; fully returned ones live in Closed History.
   const listEl = $('[data-role="list"]', main);
   const list = mountEntryList(listEl, {
     id: 'dashboard',
-    title: () => 'Current Open Suspense',
-    defaultStatus: 'OPEN',
-    columns: () => OPEN_COLUMNS,
+    title: () => 'Pending Suspense',
+    defaultStatus: 'PENDING',
+    columns: () => PENDING_COLUMNS,
   });
 
   const showInTable = (patch) => {

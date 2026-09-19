@@ -54,15 +54,33 @@ function describeHistory(h) {
           .map(([k, c]) => `${FIELD_LABELS[k] || k}: ${fieldValue(k, c.from)} → ${fieldValue(k, c.to)}`)
           .join('; '),
       };
+    case 'RETURN':
+      return {
+        title: d.status === 'CLOSED' ? 'Return recorded — entry closed' : 'Return recorded',
+        text:
+          `${fmtMoney(d.amountPaise)} returned by ${d.returnedBy} on ${fmtDate(d.returnDate)}. ` +
+          `Total returned ${fmtMoney(d.returnedTotalPaise)}, balance ${fmtMoney(d.balancePaise)}.` +
+          (d.remark ? ` Remark: ${d.remark}` : ''),
+      };
     case 'CLOSE':
       return {
         title: 'Entry closed',
-        text: `Closed on ${fmtDate(d.closedDate)} after ${fmtDays(d.daysPending)}.${
-          d.closingRemark ? ` Remark: ${d.closingRemark}` : ''
-        }`,
+        text:
+          `Balance of ${fmtMoney(d.amountPaise)} recorded as returned by ${d.returnedBy} on ${fmtDate(
+            d.closedDate || d.returnDate
+          )} after ${fmtDays(d.daysPending)}.` + (d.remark ? ` Remark: ${d.remark}` : ''),
       };
     case 'REOPEN':
-      return { title: 'Entry reopened', text: `Reason: ${d.reason}` };
+      return {
+        title: 'Entry reopened',
+        text:
+          `Reason: ${d.reason}` +
+          (d.removedReturn
+            ? ` · Removed the return of ${fmtMoney(d.removedReturn.amountPaise)} dated ${fmtDate(
+                d.removedReturn.returnDate
+              )}.`
+            : ''),
+      };
     case 'DELETE':
       return { title: 'Entry deleted', text: `Reason: ${d.reason}` };
     case 'RESTORE':
@@ -100,16 +118,28 @@ export async function showEntryDetail(entryOrId) {
           <div class="detail-what">${e.particulars}</div>
         </div>
         <div class="detail-amount-wrap">
-          <div class="detail-amount">${fmtMoney(e.amountPaise)}</div>
+          <div class="detail-amount">${fmtMoney(e.status === 'CLOSED' ? e.amountPaise : e.balancePaise)}</div>
+          <div class="detail-amount-note">${e.status === 'CLOSED' ? 'returned in full' : 'balance to come back'}</div>
           ${statusBadge(e)}
         </div>
       </div>
 
+      <h3 class="section-label">Original Details</h3>
       <dl class="detail-grid">
         ${detailItem('SRN', e.srn)}
-        ${detailItem('Date Given', fmtDate(e.entryDate))}
-        ${detailItem(e.status === 'OPEN' ? 'Age' : 'Age / Days Pending', ageBadge(e, { withLevel: e.status === 'OPEN' }))}
+        ${detailItem('Original Date', fmtDate(e.entryDate))}
+        ${detailItem('Original Amount', fmtMoney(e.amountPaise))}
+        ${detailItem('Given To', e.whom)}
+        ${detailItem('Particulars', e.particulars)}
+        ${detailItem(e.status === 'CLOSED' ? 'Age / Days Pending' : 'Age', ageBadge(e, { withLevel: e.status !== 'CLOSED' }))}
         ${detailItem('Remark', e.remark, true)}
+      </dl>
+
+      <h3 class="section-label">Return Summary</h3>
+      <dl class="detail-grid">
+        ${detailItem('Total Returned', fmtMoney(e.returnedPaise))}
+        ${detailItem('Balance Amount', html`<strong>${fmtMoney(e.balancePaise)}</strong>`)}
+        ${detailItem('Status', statusBadge(e))}
         ${e.status === 'CLOSED'
           ? html`${detailItem('Closed Date', fmtDate(e.closedDate))} ${detailItem('Closed By', e.closedBy)}
             ${detailItem('Closing Remark', e.closingRemark)}`
@@ -119,6 +149,42 @@ export async function showEntryDetail(entryOrId) {
             ${detailItem('Delete Reason', e.deleteReason)}`
           : ''}
       </dl>
+
+      <h3 class="section-label">Return History</h3>
+      ${e.returns.length
+        ? html`<div class="table-wrap">
+            <table class="data-table data-table--compact return-history">
+              <thead>
+                <tr>
+                  <th scope="col">Return Date</th>
+                  <th scope="col">Returned By</th>
+                  <th scope="col" class="num">Amount</th>
+                  <th scope="col">Remark</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${e.returns.map(
+                  (r) => html`<tr>
+                    <td data-label="Return Date" class="nowrap">${fmtDate(r.returnDate)}</td>
+                    <td data-label="Returned By">${r.returnedBy}</td>
+                    <td data-label="Amount" class="num strong">${fmtMoney(r.amountPaise)}</td>
+                    <td data-label="Remark">
+                      ${r.remark || html`<span class="muted">—</span>`}
+                      ${r.recordedBy ? html`<div class="cell-sub">recorded by ${r.recordedBy}</div>` : ''}
+                    </td>
+                  </tr>`
+                )}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" colspan="2">Total Returned</th>
+                  <td class="num">${fmtMoney(e.returnedPaise)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>`
+        : html`<div class="empty">Nothing returned yet. The full ${fmtMoney(e.amountPaise)} is still pending.</div>`}
 
       <h3 class="section-label">Record Information</h3>
       <dl class="detail-grid detail-grid--audit">
@@ -157,9 +223,10 @@ export async function showEntryDetail(entryOrId) {
       ${manage && e.status === 'CLOSED' && isAdmin()
         ? html`<button type="button" class="btn" data-act="reopen">Reopen</button>`
         : ''}
-      ${manage && e.status === 'OPEN'
+      ${manage && e.status !== 'CLOSED'
         ? html`<button type="button" class="btn" data-act="edit">Edit</button>
-            <button type="button" class="btn btn--primary" data-act="close">Close Entry</button>`
+            <button type="button" class="btn" data-act="close">Close Entry</button>
+            <button type="button" class="btn btn--primary" data-act="return">+ Add Return</button>`
         : ''}
     `
   );
@@ -170,6 +237,7 @@ export async function showEntryDetail(entryOrId) {
     m.close();
     const actions = {
       edit: () => showEntryForm(e),
+      return: () => showReturnDialog(e),
       close: () => showCloseDialog(e),
       reopen: () => showReopenDialog(e),
       delete: () => showDeleteDialog(e),
@@ -370,11 +438,125 @@ function entrySummaryBox(e) {
     <dl class="summary-box-grid">
       <div><dt>Given To</dt><dd>${e.whom}</dd></div>
       <div><dt>Particulars</dt><dd>${e.particulars}</dd></div>
-      <div><dt>Amount</dt><dd class="strong">${fmtMoney(e.amountPaise)}</dd></div>
+      <div><dt>Original Amount</dt><dd>${fmtMoney(e.amountPaise)}</dd></div>
+      <div><dt>Returned</dt><dd>${fmtMoney(e.returnedPaise)}</dd></div>
+      <div><dt>Balance</dt><dd class="strong">${fmtMoney(e.balancePaise)}</dd></div>
       <div><dt>Date Given</dt><dd>${fmtDate(e.entryDate)}</dd></div>
       <div><dt>Age</dt><dd>${ageBadge(e)}</dd></div>
     </dl>
   </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Add Return - money coming back to JPM from the same person
+// ---------------------------------------------------------------------------
+
+export function showReturnDialog(e) {
+  const m = openModal({ title: `Add Return — ${e.srn}` });
+  setHtml(
+    m.body,
+    html`<form class="form" novalidate autocomplete="off">
+      ${entrySummaryBox(e)}
+      <div class="form-row">
+        <div class="field">
+          <label for="r-date">Return Date <span class="req">*</span></label>
+          <input id="r-date" name="returnDate" type="date" required max="${state.today}" value="${state.today}" />
+          <div class="hint">Date the money came back.</div>
+        </div>
+        <div class="field">
+          <label for="r-amount">Returned Amount <span class="req">*</span></label>
+          <div class="input-prefix">
+            <span aria-hidden="true">₹</span>
+            <input id="r-amount" name="amount" type="text" inputmode="decimal" placeholder="e.g. 500" />
+          </div>
+          <div class="hint">Balance now: <strong>${fmtMoney(e.balancePaise)}</strong></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="r-by">Returned By <span class="req">*</span></label>
+        <input id="r-by" name="returnedBy" type="text" maxlength="100" value="${e.whom}" />
+        <div class="hint">Usually the same person the amount was given to.</div>
+      </div>
+
+      <div class="field">
+        <label for="r-remark">Return Remark <span class="optional">(optional)</span></label>
+        <input id="r-remark" name="remark" type="text" maxlength="500" placeholder="e.g. Partial amount returned" />
+      </div>
+
+      <p class="hint" data-role="preview"></p>
+      <div class="form-error" role="alert" hidden></div>
+      <button type="submit" hidden></button>
+    </form>`
+  );
+  setHtml(
+    m.footer,
+    html`<button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn btn--primary" data-save>Save Return</button>`
+  );
+
+  const form = $('form', m.body);
+  const btn = $('[data-save]', m.footer);
+  const preview = $('[data-role="preview"]', m.body);
+
+  // Show what the entry will look like after saving, so staff can check before committing.
+  const updatePreview = () => {
+    const paise = parseAmountInput(form.amount.value.trim());
+    if (paise === null || paise <= 0 || paise > e.balancePaise) {
+      preview.textContent = '';
+      return;
+    }
+    const left = e.balancePaise - paise;
+    preview.textContent =
+      left === 0
+        ? `This returns the full balance, so ${e.srn} will be closed automatically.`
+        : `After saving: returned ${fmtMoney(e.returnedPaise + paise)}, balance ${fmtMoney(left)} (Partially Settled).`;
+  };
+  form.addEventListener('input', updatePreview);
+
+  const submit = async (ev) => {
+    if (ev) ev.preventDefault();
+    clearFieldErrors(form);
+    const values = {
+      returnDate: form.returnDate.value,
+      returnedBy: form.returnedBy.value.trim(),
+      amount: form.amount.value.trim(),
+      remark: form.remark.value.trim(),
+      version: e.version,
+    };
+    if (!values.returnDate) return showFieldError(form, 'returnDate', 'Select the date the money came back.');
+    if (values.returnDate > state.today) return showFieldError(form, 'returnDate', 'Return date cannot be in the future.');
+    if (values.returnDate < e.entryDate) {
+      return showFieldError(form, 'returnDate', 'Return date cannot be before the date the amount was given.');
+    }
+    if (!values.returnedBy) return showFieldError(form, 'returnedBy', 'Enter who returned the amount.');
+    const paise = parseAmountInput(values.amount);
+    if (paise === null || paise <= 0) {
+      return showFieldError(form, 'amount', 'Enter a valid returned amount greater than zero.');
+    }
+    if (paise > e.balancePaise) {
+      return showFieldError(form, 'amount', 'Returned amount cannot be greater than the remaining balance.');
+    }
+
+    await withBusy(btn, 'Saving…', async () => {
+      try {
+        const res = await api('POST', `/api/entries/${e.id}/returns`, values);
+        const saved = res.entry;
+        m.close();
+        toast(
+          saved.status === 'CLOSED'
+            ? `${saved.srn}: ${fmtMoney(paise)} returned. Balance is now zero, so it is closed.`
+            : `${saved.srn}: ${fmtMoney(paise)} returned. Balance ${fmtMoney(saved.balancePaise)}.`
+        );
+        refreshView();
+      } catch (err) {
+        showFieldError(form, err.field, err.message);
+        if (err.status === 409) refreshView();
+      }
+    });
+  };
+  form.addEventListener('submit', submit);
+  btn.addEventListener('click', submit);
 }
 
 export function showCloseDialog(e) {
@@ -384,6 +566,13 @@ export function showCloseDialog(e) {
     html`<form class="form" novalidate>
       ${entrySummaryBox(e)}
       <p class="confirm-question">Are you sure you want to close this suspense entry?</p>
+      ${e.balancePaise > 0
+        ? html`<p class="notice">
+            A balance of <strong>${fmtMoney(e.balancePaise)}</strong> is still outstanding. Closing records that amount
+            as returned by <strong>${e.whom}</strong> today, so the balance becomes zero. To record a smaller amount,
+            use <strong>+ Add Return</strong> instead.
+          </p>`
+        : ''}
       <div class="field">
         <label for="c-remark">Closing Remark <span class="optional">(optional)</span></label>
         <input
@@ -391,7 +580,7 @@ export function showCloseDialog(e) {
           name="closingRemark"
           type="text"
           maxlength="500"
-          placeholder="e.g. Bill submitted, balance returned, adjusted in salary"
+          placeholder="e.g. Balance returned in cash, adjusted in salary"
         />
       </div>
       <p class="hint">
@@ -479,9 +668,14 @@ function reasonDialog({ title, intro, entry, label, placeholder, confirmLabel, b
 }
 
 export function showReopenDialog(e) {
+  const last = e.returns[e.returns.length - 1];
   reasonDialog({
     title: 'Reopen Entry',
-    intro: 'Reopening moves this entry back to Open and adds it to the Open Amount again.',
+    intro: last
+      ? `Reopening removes the last return (${fmtMoney(last.amountPaise)} on ${fmtDate(last.returnDate)} by ${
+          last.returnedBy
+        }) and puts that amount back into the balance. Use this when a return or a closing was recorded by mistake.`
+      : 'Reopening puts this entry back among the pending ones.',
     entry: e,
     label: 'Reason for reopening',
     placeholder: 'e.g. Closed by mistake',

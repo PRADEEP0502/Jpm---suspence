@@ -673,7 +673,7 @@ textarea {
 }
 .data-table th,
 .data-table td {
-  padding: 10px 14px;
+  padding: 10px 12px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--row-border);
@@ -715,7 +715,10 @@ textarea {
   width: 1%;
 }
 .data-table .actions .btn + .btn {
-  margin-left: 6px;
+  margin-left: 5px;
+}
+.data-table .actions .btn--sm {
+  padding: 0 8px;
 }
 .data-table tr.is-clickable {
   cursor: pointer;
@@ -830,6 +833,11 @@ textarea {
   background: var(--open-bg);
   color: var(--open-fg);
   border-color: var(--open-line);
+}
+.badge--partial {
+  background: #fff3d6;
+  color: #7a5200;
+  border-color: #f0dca6;
 }
 .badge--closed {
   background: var(--closed-bg);
@@ -1275,6 +1283,25 @@ textarea {
   align-items: flex-end;
   gap: 6px;
 }
+.detail-amount-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ec-amount-note {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-align: right;
+}
+.returned {
+  color: var(--closed-fg);
+  font-weight: 600;
+}
+.return-history tfoot th,
+.return-history tfoot td {
+  font-weight: 600;
+}
 .detail-amount {
   font-size: 24px;
   font-weight: 600;
@@ -1526,13 +1553,29 @@ textarea {
   flex: 1;
 }
 
+/* Very wide screens: give the wider tables more room. */
+@media (min-width: 1700px) {
+  .container,
+  .topbar-inner,
+  .nav-inner {
+    max-width: 1560px;
+  }
+}
+
 /* ------------------------------------------------------------------ Responsive */
 
 /* Laptops / landscape tablets: tighter tables so more columns fit. */
-@media (max-width: 1280px) {
+@media (max-width: 1400px) {
   .data-table th,
   .data-table td {
-    padding: 9px 10px;
+    padding: 9px 8px;
+  }
+  .data-table .actions .btn--sm {
+    padding: 0 7px;
+    font-size: 12px;
+  }
+  .data-table .actions .btn + .btn {
+    margin-left: 4px;
   }
   .data-table thead th {
     white-space: normal;
@@ -2051,6 +2094,11 @@ textarea {
   }
   .filters {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* Long rupee amounts in the three-column summary rows may wrap on tiny screens. */
+  .data-table--compact .num {
+    white-space: normal;
+    font-size: 12.5px;
   }
   .brand-sub {
     font-size: 12px;

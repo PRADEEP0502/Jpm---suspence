@@ -169,6 +169,11 @@ function buildApp() {
     wrapWrite(async (req) => ({ entry: await entries.updateEntry(req.params.id, req.body, req.user) }))
   );
   api.post(
+    '/entries/:id/returns',
+    auth.requireLogin,
+    wrapWrite(async (req) => ({ entry: await entries.addReturn(req.params.id, req.body, req.user) }))
+  );
+  api.post(
     '/entries/:id/close',
     auth.requireLogin,
     wrapWrite(async (req) => ({ entry: await entries.closeEntry(req.params.id, req.body, req.user) }))

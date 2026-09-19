@@ -2,10 +2,18 @@
 
 An internal web application for tracking suspense amounts given to employees or other people, and whether each one is still pending or has been settled.
 
-For every entry it shows **who** received the amount, **what** it was for, **how much**, **when**, its **age** (days pending) and its **status** (Open or Closed). Each entry has a permanent **SRN** (Suspense Reference Number: `SRN-001`, `SRN-002`, …).
+For every entry it shows **who** received the amount, **what** it was for, the **Original Amount**, how much has been **Returned**, the **Balance** still outstanding, its **age** (days pending) and its **status**. Each entry has a permanent **SRN** (Suspense Reference Number: `SRN-001`, `SRN-002`, …).
 
 - **Anyone** on the office network can open the Dashboard, All Suspense, Closed History and Person Summary (view only, no login).
-- **Entry / Admin users** log in to **Add → Edit → Close** entries.
+- **Entry / Admin users** log in to **Add → Edit → Add Return → Close** entries.
+
+Money can come back in parts, and the Original Amount is never overwritten:
+
+```
+Original Amount  −  Returned Amount  =  Balance Amount
+   ₹1,000               ₹500                ₹500     ->  Partially Settled
+   ₹1,000             ₹1,000                  ₹0     ->  Closed (closed date saved automatically)
+```
 
 ---
 
@@ -78,7 +86,7 @@ You will be asked to set a new password straight away. After that, open **Users*
 |---|:-:|:-:|:-:|
 | Dashboard: pending and settled amounts, open entries, aging, search, filters, person-wise and particular-wise summaries | ✓ | ✓ | ✓ |
 | All Suspense, Closed History and Person Summary pages (view only) | ✓ | ✓ | ✓ |
-| Manage Entries: **Add, Edit, Close** | | ✓ | ✓ |
+| Manage Entries: **Add, Edit, Add Return, Close** | | ✓ | ✓ |
 | Change history of an entry | | ✓ | ✓ |
 | Reopen a closed entry, delete/restore an entry (reason required) | | | ✓ |
 | Users: create logins, reset passwords, deactivate | | | ✓ |
@@ -89,16 +97,23 @@ You will be asked to set a new password straight away. After that, open **Users*
 
 1. **Add**: click **+ Add Suspense Entry** and fill in the Date Given, Given To, Particulars (type it, or tap a quick-pick such as *Travel*), Amount, and an optional Remark. The **SRN**, Status (**OPEN**), Created By and Created Date are filled in automatically.
 2. **Edit**: click **Edit** on an open entry to correct its Date, Given To, Particulars, Amount or Remark. **The SRN never changes.**
-3. **Close**: when the amount is settled, click **Close**, add an optional closing remark, and confirm *"Are you sure you want to close this suspense entry?"*. The **Closed Date** (today) and **Closed By** (your name) are saved automatically, and the entry moves to **Closed History**.
+3. **Add Return**: each time the person gives money back, click **Return** and fill in the **Return Date**, **Returned By**, **Returned Amount** and an optional **Return Remark**.
+   - Part of the balance → the entry becomes **Partially Settled** and the balance drops.
+   - The last of the balance → the entry **closes itself**, saving the Closed Date and Closed By.
+   - More than the balance is refused: *"Returned amount cannot be greater than the remaining balance."*
+   - One SRN can have any number of returns, and they all stay in its **Return History**.
+4. **Close**: use this when the whole remaining balance is settled at once. It records that balance as a final return (so Original = Returned + Balance always holds), saves the Closed Date and Closed By, and moves the entry to **Closed History**.
 
-In the table, open entries show **Edit** and **Close**; closed entries show **View**. Click any row to see the full record, including created/updated information and the change history.
+An administrator can **Reopen** a closed entry: that removes the most recent return and puts its amount back into the balance, which is how a return recorded by mistake is undone.
+
+In the table, pending entries show **Edit**, **Return** and **Close**; closed entries show **View**. Click any row to see the full record, including created/updated information and the change history.
 
 ## 6. Search and filters
 
 - **One search box** finds an SRN, a name (Given To) or particulars. Typing `SRN-001` (or `srn 1`) shows exactly that record; `Ashok` shows all of Ashok's entries; `Stationery` shows all stationery-related entries.
-- **All / Open / Closed** switches which entries are listed. The **All Suspense** page lists every entry (open and closed, newest first) with its open and closed totals.
+- **Pending / Partially Settled / Closed / All** switches which entries are listed. The **All Suspense** page lists every entry (newest first) with the balance still outstanding.
 - **Filters** narrow the list further by **Given To**, **Date** (from/to), **Age** group and **Amount** (from/to).
-- The Dashboard lists **open entries only** — settled ones live in Closed History, and both together on All Suspense.
+- The Dashboard lists **pending entries only** (Open and Partially Settled) — fully returned ones live in Closed History, and both together on All Suspense.
 - On the Dashboard, clicking a name in the **Person-wise Summary** opens that person’s page, and clicking an **Aging Summary** group lists the open entries in that age range.
 
 ## 7. On phones and tablets
@@ -116,10 +131,12 @@ Every figure is calculated from the database each time the page loads. Nothing i
 
 | Figure | Rule |
 |--------|------|
-| Total Suspense Amount | Sum of all entries (deleted entries excluded) |
-| Open Amount / Open Entries | Sum / count where Status = OPEN |
-| Closed Amount / Closed Entries | Sum / count where Status = CLOSED |
-| Age (open entry) | Today − Entry Date |
+| Original Amount | What was handed over — a return never changes it |
+| Returned Amount | Total of that entry's returns |
+| Balance Amount | Original Amount − Returned Amount |
+| Status | **Open** (nothing returned), **Partially Settled** (part returned), **Closed** (balance zero) |
+| Dashboard: Balance / Returned / Pending Entries | Those three added up across all entries (deleted entries excluded) |
+| Age (pending entry) | Today − Entry Date, while any balance is outstanding |
 | Age / Days Pending (closed entry) | Closed Date − Entry Date (fixed once closed) |
 
 "Today" uses Indian Standard Time, so every computer shows the same age.
@@ -219,7 +236,7 @@ public/                Browser application (index.html, css/, js/, js/pages/)
 
 | Table | Purpose |
 |-------|---------|
-| `entries` | One document per suspense entry: `srnNo` + `srn` (unique, permanent), `entryDate`, `whom`, `particulars`, `amountPaise` (integer paise, which avoids rounding errors), `remark`, `status` (OPEN/CLOSED), `closedDate`, `closedAt`, `closedBy`, `closingRemark`, `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, soft-delete fields, and `version` (edit-conflict check) |
+| `entries` | One document per suspense entry: `srnNo` + `srn` (unique, permanent), `entryDate`, `whom`, `particulars`, `amountPaise` (the Original Amount, in integer paise to avoid rounding errors), `returns[]` (return date, returned by, amount, remark, who recorded it), `returnedPaise`, `remark`, `status` (OPEN/PARTIAL/CLOSED), `closedDate`, `closedAt`, `closedBy`, `closingRemark`, `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, soft-delete fields, and `version` (edit-conflict check) |
 | `counters` | The SRN running number (`_id: "srn"`) |
 | `users` | Logins: `username`, `displayName`, `role` (ADMIN/ENTRY), scrypt `passwordHash`, `mustChangePassword`, `isActive` |
 | `sessions` | Active logins (only a SHA-256 hash of the session token is stored; MongoDB deletes them automatically when they expire) |
@@ -253,7 +270,7 @@ At start-up the server retries the connection a few times before giving up, and 
 |---------------|--------|
 | `GET /health` (database status), `GET /events` (live updates stream), `GET /bootstrap`, `GET /dashboard`, `GET /lookups`, `GET /entries?status=ALL\|OPEN\|CLOSED&q=&whom=&age=&dateFrom=&dateTo=&dateField=entry\|closed&amountMin=&amountMax=`, `GET /entries/:id` | Everyone (read-only) |
 | `POST /auth/login`, `POST /auth/logout`, `POST /auth/change-password` | — |
-| `GET /entries/next-srn`, `POST /entries`, `PUT /entries/:id`, `POST /entries/:id/close` | Entry User, Administrator |
+| `GET /entries/next-srn`, `POST /entries`, `PUT /entries/:id`, `POST /entries/:id/returns` (record a return), `POST /entries/:id/close` | Entry User, Administrator |
 | `POST /entries/:id/reopen`, `POST /entries/:id/delete`, `POST /entries/:id/restore`, `GET /entries?status=DELETED`, `GET/POST /users`, `PUT /users/:id`, `POST /users/:id/reset-password` | Administrator |
 
 **Security notes:** passwords hashed with scrypt and a per-user salt; HttpOnly SameSite session cookies; write requests must be JSON (blocks cross-site form posts); logins are locked for 5 minutes after 5 failed attempts; temporary passwords must be replaced at first login; all user-entered text is escaped before display; Content-Security-Policy headers are set. For access from outside the office network, put the app behind HTTPS (e.g. a reverse proxy) and set `COOKIE_SECURE=true`.

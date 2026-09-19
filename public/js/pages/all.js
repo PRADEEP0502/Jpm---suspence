@@ -1,9 +1,9 @@
 import { html, setHtml, $ } from '../lib.js';
 import { mountEntryList } from '../entry-list.js';
-import { OPEN_COLUMNS, CLOSED_COLUMNS } from './dashboard.js';
+import { CLOSED_COLUMNS } from './dashboard.js';
 
 // Every suspense entry, open and closed, in one register. View-only; click a row for full details.
-const ALL_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'daysPending', 'status', 'closedDate', 'closedBy'];
+const ALL_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'daysPending', 'status'];
 
 export function render(main) {
   setHtml(
@@ -23,11 +23,12 @@ export function render(main) {
     id: 'all',
     statusChoices: [
       ['ALL', 'All'],
-      ['OPEN', 'Open'],
+      ['PENDING', 'Pending'],
+      ['PARTIAL', 'Partially Settled'],
       ['CLOSED', 'Closed'],
     ],
     defaultStatus: 'ALL',
-    columns: (status) => (status === 'OPEN' ? OPEN_COLUMNS : status === 'CLOSED' ? CLOSED_COLUMNS : ALL_COLUMNS),
+    columns: (status) => (status === 'CLOSED' ? CLOSED_COLUMNS : ALL_COLUMNS),
     dateField: (status) => (status === 'CLOSED' ? 'closed' : 'entry'),
     defaultSort: () => ({ key: 'srn', dir: 'desc' }),
   });

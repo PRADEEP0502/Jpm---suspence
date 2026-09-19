@@ -89,6 +89,7 @@ async function openDatabase() {
 
   db = client.db(config.MONGODB_DB);
   healthy = true;
+  await upgradeEntriesForReturns();
   await ensureIndexes();
   const isNew =
     (await collections.entries().countDocuments({}, { limit: 1 })) === 0 &&
@@ -100,6 +101,27 @@ async function openDatabase() {
 function hostLabel() {
   const m = /@([^/?]+)/.exec(config.MONGODB_URI);
   return m ? m[1] : 'MongoDB';
+}
+
+/**
+ * Entries created before partial returns existed have no returns list.
+ * Open ones start with nothing returned; already-closed ones count as returned in full,
+ * so that Original Amount = Returned Amount + Balance Amount holds for every record.
+ */
+async function upgradeEntriesForReturns() {
+  const missing = await collections.entries().countDocuments({ returnedPaise: { $exists: false } }, { limit: 1 });
+  if (!missing) return;
+  const open = await collections
+    .entries()
+    .updateMany({ returnedPaise: { $exists: false }, status: { $ne: 'CLOSED' } }, { $set: { returns: [], returnedPaise: 0 } });
+  const closed = await collections
+    .entries()
+    .updateMany({ returnedPaise: { $exists: false }, status: 'CLOSED' }, [
+      { $set: { returns: [], returnedPaise: '$amountPaise' } },
+    ]);
+  console.log(
+    `[setup] Prepared existing entries for partial returns (${open.modifiedCount} pending, ${closed.modifiedCount} closed).`
+  );
 }
 
 async function ensureIndexes() {

@@ -5,6 +5,7 @@ import { state } from './state.js';
 
 export function statusBadge(entry) {
   if (entry.isDeleted) return html`<span class="badge badge--deleted">Deleted</span>`;
+  if (entry.status === 'PARTIAL') return html`<span class="badge badge--partial">Partially Settled</span>`;
   return entry.status === 'OPEN'
     ? html`<span class="badge badge--open">Open</span>`
     : html`<span class="badge badge--closed">Closed</span>`;
@@ -37,27 +38,29 @@ function card(label, value, meta, modifier = '') {
 export function summaryCards(c) {
   const entries = (n) => plural(n, 'entry', 'entries');
   return html`<div class="cards">
-    ${card('Open Amount', fmtMoney(c.openAmountPaise), `Still pending · ${entries(c.openCount)}`, 'open')}
-    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `Settled · ${entries(c.closedCount)}`, 'closed')}
+    ${card('Balance Amount', fmtMoney(c.balanceAmountPaise), `Still to come back · ${entries(c.pendingCount)}`, 'open')}
+    ${card('Returned Amount', fmtMoney(c.returnedAmountPaise), `Out of ${fmtMoney(c.originalAmountPaise)} given`, 'closed')}
     ${card(
-      'Open Entries',
-      c.openCount,
-      c.openCount ? `Longest waiting: ${fmtDays(c.oldestOpenDays)}` : 'Nothing pending'
+      'Pending Entries',
+      c.pendingCount,
+      c.pendingCount ? `Longest waiting: ${fmtDays(c.oldestPendingDays)}` : 'Nothing pending'
     )}
   </div>`;
 }
 
 /**
- * Person-wise / particular-wise summary: Given To (or Particulars) | Open Amount | Closed Amount | Total Amount.
+ * Person-wise / particular-wise summary:
+ * Given To (or Particulars) | Original Amount | Returned Amount | Balance Amount.
  * rowAttrs(row) may return attributes (e.g. data-whom) that make a row clickable.
  */
 export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
   const shown = limit ? rows.slice(0, limit) : rows;
   const nameLabel = kind === 'person' ? 'Given To' : 'Particulars';
+  // Short labels: the panel heading already says what the table is about.
   const amountCols = [
-    ['Open Amount', 'openAmountPaise'],
-    ['Closed Amount', 'closedAmountPaise'],
-    ['Total Amount', 'totalAmountPaise'],
+    ['Original', 'originalAmountPaise'],
+    ['Returned', 'returnedAmountPaise'],
+    ['Balance', 'balanceAmountPaise'],
   ];
   const sum = (key) => rows.reduce((s, r) => s + r[key], 0);
 
@@ -76,13 +79,13 @@ export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
           (r) => html`<tr class="${rowAttrs ? 'is-clickable' : ''}" ${rowAttrs ? rowAttrs(r) : ''}>
             <td data-label="${nameLabel}"><div>
               <span class="${rowAttrs ? 'row-link' : 'strong'}">${r.name}</span>
-              <div class="cell-sub">${plural(r.totalCount, 'entry', 'entries')}${r.openCount
-                ? ` · ${r.openCount} open`
+              <div class="cell-sub">${plural(r.totalCount, 'entry', 'entries')}${r.pendingCount
+                ? ` · ${r.pendingCount} pending`
                 : ''}</div>
             </div></td>
             ${amountCols.map(
               ([label, key]) =>
-                html`<td data-label="${label}" class="num ${key === 'openAmountPaise' && r[key] ? 'strong' : ''} ${r[key]
+                html`<td data-label="${label}" class="num ${key === 'balanceAmountPaise' && r[key] ? 'strong' : ''} ${r[key]
                   ? ''
                   : 'muted'}">${fmtMoney(r[key])}</td>`
             )}

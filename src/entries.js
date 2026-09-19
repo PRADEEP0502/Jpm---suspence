@@ -1,14 +1,25 @@
 'use strict';
 
 /**
- * Suspense entry lifecycle and all dashboard calculations (MongoDB).
+ * Suspense entry lifecycle, partial returns and all dashboard calculations (MongoDB).
  *
  * Every entry gets a permanent SRN (Suspense Reference Number: SRN-001, SRN-002, ...) when it is
- * created. The number comes from an atomic counter, is never reused, and never changes on edit or close.
+ * created. The number comes from an atomic counter, is never reused, and never changes - not on
+ * edit, not when money is returned, not on close.
  *
- *   OPEN   --close-->  CLOSED        (entry user or admin; closed date = today, automatic)
- *   CLOSED --reopen--> OPEN          (admin only, reason required, audited)
- *   any    --delete--> deleted flag  (admin only, soft delete, reason required, restorable)
+ * Money model (the Original Amount is never overwritten):
+ *
+ *   Original Amount  - what was handed over, fixed for ever
+ *   Returns[]        - each time the person gives money back: date, returned by, amount, remark
+ *   Returned Amount  - the total of those returns
+ *   Balance Amount   - Original - Returned
+ *
+ *   OPEN      balance = original (nothing returned yet)
+ *   PARTIAL   something returned, balance still outstanding   ("Partially Settled")
+ *   CLOSED    balance is zero; closed date and closed by are recorded automatically
+ *
+ *   CLOSED --reopen--> previous state   (admin only, reason required, audited)
+ *   any    --delete--> deleted flag     (admin only, soft delete, reason required, restorable)
  *
  * Nothing is ever physically removed from the entries collection.
  */
@@ -31,16 +42,37 @@ const {
   daysBetween,
 } = require('./util');
 
-const LIST_STATUSES = ['OPEN', 'CLOSED', 'ALL', 'DELETED'];
+// PENDING = anything still owed (OPEN or PARTIAL) - what the dashboard shows.
+const LIST_STATUSES = ['PENDING', 'OPEN', 'PARTIAL', 'CLOSED', 'ALL', 'DELETED'];
 
-/** Age in whole days: (closed date, or today while still open) - the date the amount was given. */
+/** Age in whole days: (closed date, or today while money is still owed) - the date it was given. */
 function ageOf(doc, today) {
   return Math.max(0, daysBetween(doc.entryDate, doc.closedDate || today));
+}
+
+/** Status follows the money: nothing back = OPEN, part back = PARTIAL, all back = CLOSED. */
+function statusFor(returnedPaise, originalPaise) {
+  if (returnedPaise <= 0) return 'OPEN';
+  return returnedPaise >= originalPaise ? 'CLOSED' : 'PARTIAL';
+}
+
+function mapReturn(r) {
+  return {
+    id: String(r.id),
+    returnDate: r.returnDate,
+    returnedBy: r.returnedBy,
+    amountPaise: r.amountPaise,
+    remark: r.remark ?? null,
+    recordedBy: r.recordedBy ?? null,
+    recordedAt: r.recordedAt ?? null,
+  };
 }
 
 function mapEntry(doc, today) {
   const ageDays = ageOf(doc, today);
   const bucket = bucketForAge(ageDays);
+  const returnedPaise = doc.returnedPaise || 0;
+  const balancePaise = doc.amountPaise - returnedPaise;
   return {
     id: String(doc._id),
     srnNo: doc.srnNo,
@@ -48,7 +80,11 @@ function mapEntry(doc, today) {
     entryDate: doc.entryDate,
     whom: doc.whom,
     particulars: doc.particulars,
-    amountPaise: doc.amountPaise,
+    amountPaise: doc.amountPaise, // Original Amount - never changes once money is returned
+    returnedPaise,
+    balancePaise,
+    returns: (doc.returns || []).map(mapReturn),
+    returnCount: (doc.returns || []).length,
     remark: doc.remark ?? null,
     status: doc.status,
     ageDays,
@@ -117,7 +153,8 @@ async function listEntries(query = {}) {
     filter.isDeleted = true;
   } else {
     filter.isDeleted = false;
-    if (status !== 'ALL') filter.status = status;
+    if (status === 'PENDING') filter.status = { $in: ['OPEN', 'PARTIAL'] };
+    else if (status !== 'ALL') filter.status = status;
   }
 
   // One search box: SRN, name or particulars. "SRN-001", "srn 1" or "SRN001" find exactly that record.
@@ -149,14 +186,22 @@ async function listEntries(query = {}) {
   const docs = await db.collections.entries().find(filter).sort({ srnNo: -1 }).toArray();
   let entries = docs.map((doc) => mapEntry(doc, today));
 
-  // Age depends on today (open entries) or the closing date (closed ones), so it is applied here.
+  // Age depends on today (still owed) or the closing date, so it is applied here.
   const bucket = AGE_BUCKETS.find((b) => b.key === query.age);
   if (bucket) {
     entries = entries.filter((e) => e.ageDays >= bucket.min && (bucket.max === null || e.ageDays <= bucket.max));
   }
 
-  const amountPaise = entries.reduce((sum, e) => sum + e.amountPaise, 0);
-  return { today, status, entries, totals: { count: entries.length, amountPaise } };
+  const totals = entries.reduce(
+    (t, e) => ({
+      count: t.count + 1,
+      amountPaise: t.amountPaise + e.amountPaise,
+      returnedPaise: t.returnedPaise + e.returnedPaise,
+      balancePaise: t.balancePaise + e.balancePaise,
+    }),
+    { count: 0, amountPaise: 0, returnedPaise: 0, balancePaise: 0 }
+  );
+  return { today, status, entries, totals };
 }
 
 /** Everything the dashboard needs, calculated from the live (non-deleted) entries. */
@@ -168,12 +213,12 @@ async function dashboardSummary() {
   const blank = (name) => ({
     name,
     totalCount: 0,
-    totalAmountPaise: 0,
-    openCount: 0,
-    openAmountPaise: 0,
+    originalAmountPaise: 0,
+    returnedAmountPaise: 0,
+    balanceAmountPaise: 0,
+    pendingCount: 0,
     closedCount: 0,
-    closedAmountPaise: 0,
-    oldestOpenDays: null,
+    oldestPendingDays: null,
   });
   const cards = blank('ALL');
   const persons = new Map();
@@ -187,22 +232,23 @@ async function dashboardSummary() {
   };
 
   for (const e of entries) {
+    const pending = e.status !== 'CLOSED';
     for (const g of [cards, group(persons, e.whom), group(particulars, e.particulars)]) {
       g.totalCount += 1;
-      g.totalAmountPaise += e.amountPaise;
-      if (e.status === 'OPEN') {
-        g.openCount += 1;
-        g.openAmountPaise += e.amountPaise;
-        g.oldestOpenDays = Math.max(g.oldestOpenDays ?? 0, e.ageDays);
+      g.originalAmountPaise += e.amountPaise;
+      g.returnedAmountPaise += e.returnedPaise;
+      g.balanceAmountPaise += e.balancePaise;
+      if (pending) {
+        g.pendingCount += 1;
+        g.oldestPendingDays = Math.max(g.oldestPendingDays ?? 0, e.ageDays);
       } else {
         g.closedCount += 1;
-        g.closedAmountPaise += e.amountPaise;
       }
     }
-    if (e.status === 'OPEN') {
+    if (pending) {
       const b = aging.find((a) => a.key === e.ageBucket);
       b.count += 1;
-      b.amountPaise += e.amountPaise;
+      b.amountPaise += e.balancePaise; // aging is about money still outstanding
     }
   }
 
@@ -214,10 +260,10 @@ async function dashboardSummary() {
     cards,
     aging,
     persons: [...persons.values()].sort(
-      (a, b) => b.openAmountPaise - a.openAmountPaise || b.totalAmountPaise - a.totalAmountPaise || byName(a, b)
+      (a, b) => b.balanceAmountPaise - a.balanceAmountPaise || b.originalAmountPaise - a.originalAmountPaise || byName(a, b)
     ),
     particulars: [...particulars.values()].sort(
-      (a, b) => b.totalAmountPaise - a.totalAmountPaise || b.openAmountPaise - a.openAmountPaise || byName(a, b)
+      (a, b) => b.originalAmountPaise - a.originalAmountPaise || b.balanceAmountPaise - a.balanceAmountPaise || byName(a, b)
     ),
   };
 }
@@ -313,6 +359,8 @@ async function createEntry(body, user) {
     particulars: input.particulars,
     particularsLower: input.particulars.toLowerCase(),
     amountPaise: input.amountPaise,
+    returnedPaise: 0,
+    returns: [],
     remark: input.remark,
     status: 'OPEN',
     closedDate: null,
@@ -345,6 +393,16 @@ async function updateEntry(id, body, user) {
   input.whom = await canonicalSpelling('whom', input.whom, doc._id);
   input.particulars = await canonicalSpelling('particulars', input.particulars, doc._id);
 
+  // The Original Amount may be corrected, but never below what has already been returned.
+  const returnedPaise = doc.returnedPaise || 0;
+  if (input.amountPaise < returnedPaise) {
+    throw new HttpError(
+      400,
+      `Original amount cannot be less than the amount already returned (${(returnedPaise / 100).toFixed(2)}).`,
+      { field: 'amount' }
+    );
+  }
+
   const current = {
     entryDate: doc.entryDate,
     whom: doc.whom,
@@ -358,8 +416,14 @@ async function updateEntry(id, body, user) {
   }
   if (Object.keys(changes).length === 0) return mapEntry(doc, todayISO());
 
+  const status = statusFor(returnedPaise, input.amountPaise);
+  const closing =
+    status === 'CLOSED' && doc.status !== 'CLOSED'
+      ? { closedDate: todayISO(), closedAt: new Date(), closedBy: user.displayName, closedByUserId: user.id }
+      : {};
+
   const result = await db.collections.entries().findOneAndUpdate(
-    { _id: doc._id, version: doc.version, status: 'OPEN', isDeleted: false },
+    { _id: doc._id, version: doc.version, isDeleted: false },
     {
       $set: {
         entryDate: input.entryDate,
@@ -369,6 +433,8 @@ async function updateEntry(id, body, user) {
         particularsLower: input.particulars.toLowerCase(),
         amountPaise: input.amountPaise,
         remark: input.remark,
+        status,
+        ...closing,
         updatedAt: new Date(),
         updatedBy: user.displayName,
       },
@@ -382,6 +448,119 @@ async function updateEntry(id, body, user) {
   return mapEntry(updated, todayISO());
 }
 
+// ---------------------------------------------------------------------------
+// Returns (money coming back to JPM)
+// ---------------------------------------------------------------------------
+
+function validateReturnInput(body, doc, today) {
+  const returnDate = String(body.returnDate || '').trim();
+  if (!isValidISODate(returnDate)) throw new HttpError(400, 'Enter a valid return date.', { field: 'returnDate' });
+  if (returnDate > today) throw new HttpError(400, 'Return date cannot be in the future.', { field: 'returnDate' });
+  if (returnDate < doc.entryDate) {
+    throw new HttpError(400, 'Return date cannot be before the date the amount was given.', { field: 'returnDate' });
+  }
+
+  const returnedBy = cleanText(body.returnedBy) || doc.whom;
+  if (returnedBy.length > 100) throw new HttpError(400, 'Name is too long (max 100 characters).', { field: 'returnedBy' });
+
+  const balancePaise = doc.amountPaise - (doc.returnedPaise || 0);
+  const amountPaise = parseAmountToPaise(body.amount);
+  if (amountPaise === null || amountPaise <= 0) {
+    throw new HttpError(400, 'Enter a valid returned amount greater than zero (for example 500 or 250.50).', {
+      field: 'amount',
+    });
+  }
+  if (amountPaise > balancePaise) {
+    throw new HttpError(400, 'Returned amount cannot be greater than the remaining balance.', { field: 'amount' });
+  }
+
+  const remark = cleanText(body.remark);
+  if (remark.length > 500) throw new HttpError(400, 'Return remark is too long (max 500 characters).', { field: 'remark' });
+
+  return { returnDate, returnedBy, amountPaise, remark: remark || null };
+}
+
+/** Record money returned by the person. Closes the entry automatically when the balance reaches zero. */
+async function addReturn(id, body, user) {
+  const doc = await requireActiveDoc(id);
+  if (doc.status === 'CLOSED') {
+    throw new HttpError(409, `${doc.srn} is already closed - nothing is left to return.`);
+  }
+  checkVersion(doc, body.version);
+
+  const today = todayISO();
+  const input = validateReturnInput(body, doc, today);
+  return applyReturn(doc, input, user, today, 'RETURN');
+}
+
+/** Shared by Add Return and Close (closing records the remaining balance as a final return). */
+async function applyReturn(doc, input, user, today, action) {
+  const entry = {
+    id: new db.ObjectId(),
+    returnDate: input.returnDate,
+    returnedBy: input.returnedBy,
+    amountPaise: input.amountPaise,
+    remark: input.remark,
+    recordedBy: user.displayName,
+    recordedByUserId: user.id,
+    recordedAt: new Date(),
+  };
+  const returns = [...(doc.returns || []), entry];
+  const returnedPaise = (doc.returnedPaise || 0) + input.amountPaise;
+  const balancePaise = doc.amountPaise - returnedPaise;
+  const status = statusFor(returnedPaise, doc.amountPaise);
+
+  const set = {
+    returns,
+    returnedPaise,
+    status,
+    updatedAt: new Date(),
+    updatedBy: user.displayName,
+  };
+  if (status === 'CLOSED') {
+    set.closedDate = today;
+    set.closedAt = new Date();
+    set.closedBy = user.displayName;
+    set.closedByUserId = user.id;
+    if (input.closingRemark !== undefined) set.closingRemark = input.closingRemark;
+  }
+
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, version: doc.version, isDeleted: false, status: { $ne: 'CLOSED' } },
+    { $set: set, $inc: { version: 1 } },
+    { returnDocument: 'after' }
+  );
+  const updated = updatedDoc(result);
+  if (!updated) {
+    throw new HttpError(409, `${doc.srn} was changed by someone else a moment ago. Please reopen the entry and try again.`, {
+      code: 'VERSION_CONFLICT',
+    });
+  }
+
+  const saved = mapEntry(updated, today);
+  await audit.logAction({
+    entryId: doc._id,
+    action,
+    details: {
+      srn: doc.srn,
+      returnDate: input.returnDate,
+      returnedBy: input.returnedBy,
+      amountPaise: input.amountPaise,
+      remark: input.remark,
+      returnedTotalPaise: returnedPaise,
+      balancePaise,
+      status,
+      ...(status === 'CLOSED' ? { closedDate: today, daysPending: saved.ageDays } : {}),
+    },
+    user,
+  });
+  return saved;
+}
+
+/**
+ * Close an entry. Any remaining balance is recorded as a final return, so the books always
+ * satisfy: Original Amount = Returned Amount + Balance Amount.
+ */
 async function closeEntry(id, body, user) {
   const doc = await requireActiveDoc(id);
   if (doc.status === 'CLOSED') throw new HttpError(409, `${doc.srn} is already closed.`);
@@ -392,31 +571,22 @@ async function closeEntry(id, body, user) {
     throw new HttpError(400, 'Closing remark is too long (max 500 characters).', { field: 'closingRemark' });
   }
   const today = todayISO();
-  const result = await db.collections.entries().findOneAndUpdate(
-    { _id: doc._id, status: 'OPEN', isDeleted: false },
+  const balancePaise = doc.amountPaise - (doc.returnedPaise || 0);
+  const returnedBy = cleanText(body.returnedBy) || doc.whom;
+
+  return applyReturn(
+    doc,
     {
-      $set: {
-        status: 'CLOSED',
-        closedDate: today,
-        closedAt: new Date(),
-        closedBy: user.displayName,
-        closedByUserId: user.id,
-        closingRemark: closingRemark || null,
-      },
-      $inc: { version: 1 },
+      returnDate: today,
+      returnedBy,
+      amountPaise: balancePaise,
+      remark: closingRemark || 'Balance returned in full',
+      closingRemark: closingRemark || null,
     },
-    { returnDocument: 'after' }
-  );
-  const closed = updatedDoc(result);
-  if (!closed) throw new HttpError(409, `${doc.srn} is already closed.`);
-  const entry = mapEntry(closed, today);
-  await audit.logAction({
-    entryId: doc._id,
-    action: 'CLOSE',
-    details: { srn: doc.srn, closedDate: today, daysPending: entry.ageDays, closingRemark: closingRemark || null },
     user,
-  });
-  return entry;
+    today,
+    'CLOSE'
+  );
 }
 
 async function reopenEntry(id, body, user) {
@@ -426,11 +596,20 @@ async function reopenEntry(id, body, user) {
   if (!reason) throw new HttpError(400, 'Enter the reason for reopening.', { field: 'reason' });
   if (reason.length > 500) throw new HttpError(400, 'Reason is too long (max 500 characters).', { field: 'reason' });
 
+  // Closing always records the remaining balance as a return, so reopening undoes that last
+  // return. The entry goes back to Partially Settled (or Open, if that was the only return).
+  const returns = [...(doc.returns || [])];
+  const removed = returns.pop() || null;
+  const returnedPaise = returns.reduce((sum, r) => sum + r.amountPaise, 0);
+  const status = statusFor(returnedPaise, doc.amountPaise);
+
   const result = await db.collections.entries().findOneAndUpdate(
     { _id: doc._id, status: 'CLOSED' },
     {
       $set: {
-        status: 'OPEN',
+        returns,
+        returnedPaise,
+        status,
         closedDate: null,
         closedAt: null,
         closedBy: null,
@@ -451,6 +630,10 @@ async function reopenEntry(id, body, user) {
     details: {
       srn: doc.srn,
       reason,
+      status,
+      removedReturn: removed
+        ? { returnDate: removed.returnDate, returnedBy: removed.returnedBy, amountPaise: removed.amountPaise, remark: removed.remark }
+        : null,
       previous: { closedDate: doc.closedDate, closedBy: doc.closedBy, closingRemark: doc.closingRemark },
     },
     user,
@@ -520,6 +703,7 @@ module.exports = {
   nextSrn,
   createEntry,
   updateEntry,
+  addReturn,
   closeEntry,
   reopenEntry,
   deleteEntry,

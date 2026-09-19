@@ -2,8 +2,8 @@ import { html, setHtml, $, api, fmtMoney, fmtDays, plural } from '../lib.js';
 import { mountEntryList } from '../entry-list.js';
 
 // The person is already named in the panel heading, so the Given To column is left out here.
-const PERSON_OPEN_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'age', 'status'];
-const PERSON_ALL_COLUMNS = [...PERSON_OPEN_COLUMNS, 'closedDate'];
+const PERSON_PENDING_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
+const PERSON_ALL_COLUMNS = [...PERSON_PENDING_COLUMNS, 'closedDate'];
 
 export function render(main, params) {
   const selected = params.name || '';
@@ -54,9 +54,9 @@ export function render(main, params) {
           <thead>
             <tr>
               <th scope="col">Given To</th>
-              <th scope="col" class="num">Open Amount</th>
-              <th scope="col" class="num">Closed Amount</th>
-              <th scope="col" class="num">Total Amount</th>
+              <th scope="col" class="num">Original</th>
+              <th scope="col" class="num">Returned</th>
+              <th scope="col" class="num">Balance</th>
             </tr>
           </thead>
           <tbody>
@@ -67,14 +67,14 @@ export function render(main, params) {
                 <td data-label="Given To"><div>
                   <a class="row-link" href="${href}" ${isSel ? html`aria-current="true"` : ''}>${p.name}</a>
                   <div class="cell-sub">
-                    ${plural(p.totalCount, 'entry', 'entries')}${p.openCount
-                      ? ` · longest waiting ${fmtDays(p.oldestOpenDays)}`
+                    ${plural(p.totalCount, 'entry', 'entries')}${p.pendingCount
+                      ? ` · longest waiting ${fmtDays(p.oldestPendingDays)}`
                       : ''}
                   </div>
                 </div></td>
-                <td data-label="Open Amount" class="num ${p.openAmountPaise ? 'strong' : 'muted'}">${fmtMoney(p.openAmountPaise)}</td>
-                <td data-label="Closed Amount" class="num ${p.closedAmountPaise ? '' : 'muted'}">${fmtMoney(p.closedAmountPaise)}</td>
-                <td data-label="Total Amount" class="num">${fmtMoney(p.totalAmountPaise)}</td>
+                <td data-label="Original" class="num">${fmtMoney(p.originalAmountPaise)}</td>
+                <td data-label="Returned" class="num ${p.returnedAmountPaise ? '' : 'muted'}">${fmtMoney(p.returnedAmountPaise)}</td>
+                <td data-label="Balance" class="num ${p.balanceAmountPaise ? 'strong' : 'muted'}">${fmtMoney(p.balanceAmountPaise)}</td>
               </tr>`;
             })}
           </tbody>
@@ -103,24 +103,24 @@ export function render(main, params) {
 
     const cardsHtml = html`<div class="cards cards--compact">
       <div class="card card--open">
-        <div class="card-label">Open Amount</div>
-        <div class="card-value">${fmtMoney(p.openAmountPaise)}</div>
-        <div class="card-meta">${plural(p.openCount, 'entry', 'entries')} pending</div>
+        <div class="card-label">Balance Amount</div>
+        <div class="card-value">${fmtMoney(p.balanceAmountPaise)}</div>
+        <div class="card-meta">${plural(p.pendingCount, 'entry', 'entries')} pending</div>
       </div>
       <div class="card card--closed">
-        <div class="card-label">Closed Amount</div>
-        <div class="card-value">${fmtMoney(p.closedAmountPaise)}</div>
-        <div class="card-meta">${plural(p.closedCount, 'entry', 'entries')} settled</div>
+        <div class="card-label">Returned Amount</div>
+        <div class="card-value">${fmtMoney(p.returnedAmountPaise)}</div>
+        <div class="card-meta">${plural(p.closedCount, 'entry', 'entries')} fully returned</div>
       </div>
       <div class="card">
-        <div class="card-label">Total Amount</div>
-        <div class="card-value">${fmtMoney(p.totalAmountPaise)}</div>
+        <div class="card-label">Original Amount</div>
+        <div class="card-value">${fmtMoney(p.originalAmountPaise)}</div>
         <div class="card-meta">${plural(p.totalCount, 'entry', 'entries')}</div>
       </div>
       <div class="card">
         <div class="card-label">Longest Waiting</div>
-        <div class="card-value">${p.openCount ? fmtDays(p.oldestOpenDays) : '—'}</div>
-        <div class="card-meta">${p.openCount ? 'since the amount was given' : 'Nothing pending'}</div>
+        <div class="card-value">${p.pendingCount ? fmtDays(p.oldestPendingDays) : '—'}</div>
+        <div class="card-meta">${p.pendingCount ? 'since the amount was given' : 'Nothing pending'}</div>
       </div>
     </div>`;
 
@@ -142,14 +142,14 @@ export function render(main, params) {
       entryList = mountEntryList($('[data-role="person-entries"]', detail), {
         id: `person:${p.name.toLowerCase()}`,
         title: (status) =>
-          status === 'OPEN' ? `Open Entries — ${p.name}` : status === 'CLOSED' ? `Closed Entries — ${p.name}` : `All Entries — ${p.name}`,
+          status === 'PENDING' ? `Pending Entries — ${p.name}` : status === 'CLOSED' ? `Closed Entries — ${p.name}` : `All Entries — ${p.name}`,
         statusChoices: [
           ['ALL', 'All'],
-          ['OPEN', 'Open'],
+          ['PENDING', 'Pending'],
           ['CLOSED', 'Closed'],
         ],
         defaultStatus: 'ALL',
-        columns: (status) => (status === 'OPEN' ? PERSON_OPEN_COLUMNS : PERSON_ALL_COLUMNS),
+        columns: (status) => (status === 'PENDING' ? PERSON_PENDING_COLUMNS : PERSON_ALL_COLUMNS),
         fixed: { whom: p.name },
       });
       if (window.innerWidth < 960) detail.scrollIntoView({ behavior: 'smooth', block: 'start' });

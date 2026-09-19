@@ -3,7 +3,7 @@
 import { html, setHtml, $, $$, api, toQuery, debounce, fmtMoney, fmtDate, fmtDateTime, plural } from './lib.js';
 import { state, canManage, isAdmin } from './state.js';
 import { statusBadge, ageBadge } from './ui.js';
-import { showEntryDetail, showEntryForm, showCloseDialog, restoreEntry } from './dialogs.js';
+import { showEntryDetail, showEntryForm, showCloseDialog, showReturnDialog, restoreEntry } from './dialogs.js';
 
 const COLUMNS = {
   srn: {
@@ -16,9 +16,27 @@ const COLUMNS = {
   whom: { label: 'Given To', sort: (e) => e.whom.toLowerCase(), cell: (e) => html`<span class="whom">${e.whom}</span>` },
   particulars: { label: 'Particulars', sort: (e) => e.particulars.toLowerCase(), cell: (e) => e.particulars },
   amount: {
-    label: 'Amount',
+    label: 'Original Amount',
     sort: (e) => e.amountPaise,
     cell: (e) => html`<span class="amount">${fmtMoney(e.amountPaise)}</span>`,
+    cls: 'num',
+  },
+  returned: {
+    label: 'Returned Amount',
+    sort: (e) => e.returnedPaise,
+    cell: (e) =>
+      e.returnedPaise
+        ? html`<span class="returned">${fmtMoney(e.returnedPaise)}</span>`
+        : html`<span class="muted">${fmtMoney(0)}</span>`,
+    cls: 'num',
+  },
+  balance: {
+    label: 'Balance Amount',
+    sort: (e) => e.balancePaise,
+    cell: (e) =>
+      e.balancePaise
+        ? html`<span class="amount">${fmtMoney(e.balancePaise)}</span>`
+        : html`<span class="muted">${fmtMoney(0)}</span>`,
     cls: 'num',
   },
   age: { label: 'Age', sort: (e) => e.ageDays, cell: (e) => ageBadge(e) },
@@ -46,6 +64,8 @@ const SORT_WORDS = {
   age: { desc: 'oldest first', asc: 'newest first' },
   daysPending: { desc: 'longest first', asc: 'shortest first' },
   amount: { desc: 'high to low', asc: 'low to high' },
+  returned: { desc: 'high to low', asc: 'low to high' },
+  balance: { desc: 'high to low', asc: 'low to high' },
   entryDate: { desc: 'latest first', asc: 'earliest first' },
   originalDate: { desc: 'latest first', asc: 'earliest first' },
   closedDate: { desc: 'latest first', asc: 'earliest first' },
@@ -69,8 +89,17 @@ function entryCard(e, keys) {
         ${keys.includes('whom') ? html`<div class="whom">${e.whom}</div>` : ''}
         <div class="ec-what">${e.particulars}</div>
       </div>
-      <div class="ec-amount">${fmtMoney(e.amountPaise)}</div>
+      <div class="ec-amount">
+        ${fmtMoney(closed ? e.amountPaise : e.balancePaise)}
+        ${!closed && e.returnedPaise ? html`<span class="ec-amount-note">balance</span>` : ''}
+      </div>
     </div>
+    ${e.returnedPaise && !closed
+      ? html`<div class="ec-row ec-row--meta">
+          <span>Original ${fmtMoney(e.amountPaise)}</span>
+          <span>Returned ${fmtMoney(e.returnedPaise)}</span>
+        </div>`
+      : ''}
     <div class="ec-row ec-row--meta">
       <span>Given ${fmtDate(e.entryDate)}</span>
       ${ageBadge(e)}
@@ -93,15 +122,18 @@ function rowActions(e) {
   if (e.isDeleted) {
     return isAdmin() ? html`<button type="button" class="btn btn--sm" data-row-act="restore">Restore</button>` : '';
   }
-  if (e.status === 'OPEN') {
+  if (e.status !== 'CLOSED') {
     return html`<button type="button" class="btn btn--sm" data-row-act="edit">Edit</button>
-      <button type="button" class="btn btn--sm btn--primary-ghost" data-row-act="close">Close</button>`;
+      <button type="button" class="btn btn--sm btn--primary-ghost" data-row-act="return">Return</button>
+      <button type="button" class="btn btn--sm" data-row-act="close">Close</button>`;
   }
   return html`<button type="button" class="btn btn--sm" data-row-act="view">View</button>`;
 }
 
 const STATUS_TITLES = {
-  OPEN: 'Current Open Suspense',
+  PENDING: 'Pending Suspense',
+  OPEN: 'Open Entries (nothing returned yet)',
+  PARTIAL: 'Partially Settled Entries',
   CLOSED: 'Closed Entries',
   ALL: 'All Suspense Entries',
   DELETED: 'Deleted Entries',
@@ -152,7 +184,7 @@ export function mountEntryList(container, config) {
   const columnKeys = () => [...cfg.columns(st.status), ...(showActions() ? ['actions'] : [])];
   const defaultSort = () => {
     if (cfg.defaultSort) return cfg.defaultSort(st.status);
-    if (st.status === 'OPEN') return { key: 'age', dir: 'desc' };
+    if (['OPEN', 'PARTIAL', 'PENDING'].includes(st.status)) return { key: 'age', dir: 'desc' };
     if (st.status === 'CLOSED') return { key: 'closedDate', dir: 'desc' };
     if (st.status === 'DELETED') return { key: 'deleted', dir: 'desc' };
     return { key: 'srn', dir: 'desc' };
@@ -333,15 +365,11 @@ export function mountEntryList(container, config) {
     const sort = st.sort || defaultSort();
     const filtered = st.q || FILTER_KEYS.some((k) => st[k]);
 
-    let breakdown = '';
-    if (st.status === 'ALL' && rows.length) {
-      const sumOf = (status) => rows.filter((e) => e.status === status).reduce((s, e) => s + e.amountPaise, 0);
-      const countOf = (status) => rows.filter((e) => e.status === status).length;
-      breakdown = ` · Open ${fmtMoney(sumOf('OPEN'))} (${countOf('OPEN')}) · Closed ${fmtMoney(sumOf('CLOSED'))} (${countOf('CLOSED')})`;
-    }
-    el('sub').textContent = `${plural(totals.count, 'entry', 'entries')} · ${fmtMoney(totals.amountPaise)}${breakdown}${
-      filtered ? ' (filtered)' : ''
-    }`;
+    const sub =
+      totals.balancePaise > 0
+        ? `${plural(totals.count, 'entry', 'entries')} · Balance ${fmtMoney(totals.balancePaise)} of ${fmtMoney(totals.amountPaise)} given`
+        : `${plural(totals.count, 'entry', 'entries')} · ${fmtMoney(totals.amountPaise)} returned in full`;
+    el('sub').textContent = sub + (filtered ? ' (filtered)' : '');
 
     if (!rows.length) {
       const message = filtered
@@ -409,9 +437,10 @@ export function mountEntryList(container, config) {
       </div>
       <div class="entry-cards">${sorted.map((e) => entryCard(e, keys))}</div>`
     );
-    el('foot').textContent = `Showing ${plural(totals.count, 'entry', 'entries')} · Total ${fmtMoney(
-      totals.amountPaise
-    )} · Tap or click an entry to see full details`;
+    el('foot').textContent =
+      `Showing ${plural(totals.count, 'entry', 'entries')} · Original ${fmtMoney(totals.amountPaise)}` +
+      ` · Returned ${fmtMoney(totals.returnedPaise)} · Balance ${fmtMoney(totals.balancePaise)}` +
+      ' · Tap or click an entry to see full details';
     fitLayout();
   }
 
@@ -508,6 +537,7 @@ export function mountEntryList(container, config) {
     if (act) {
       const actions = {
         edit: () => showEntryForm(entry),
+        return: () => showReturnDialog(entry),
         close: () => showCloseDialog(entry),
         view: () => showEntryDetail(entry),
         restore: () => restoreEntry(entry),
