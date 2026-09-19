@@ -376,7 +376,7 @@ textarea {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -1515,17 +1515,14 @@ textarea {
   }
 }
 
-/* Five summary cards / aging tiles: 3 on the first row, 2 wider ones on the second. */
+/* Five aging tiles: 3 on the first row, 2 wider ones on the second. */
 @media (max-width: 1200px) {
-  .cards:not(.cards--compact),
   .aging {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-  .cards:not(.cards--compact) > .card,
   .aging > .aging-tile {
     grid-column: span 2;
   }
-  .cards:not(.cards--compact) > .card:nth-child(n + 4),
   .aging > .aging-tile:nth-child(n + 4) {
     grid-column: span 3;
   }
@@ -1926,7 +1923,6 @@ textarea {
     gap: 8px;
   }
   .cards:not(.cards--compact) > .card,
-  .cards:not(.cards--compact) > .card:nth-child(n + 4),
   .aging > .aging-tile,
   .aging > .aging-tile:nth-child(n + 4) {
     grid-column: auto;

@@ -37,15 +37,13 @@ function card(label, value, meta, modifier = '') {
 export function summaryCards(c) {
   const entries = (n) => plural(n, 'entry', 'entries');
   return html`<div class="cards">
-    ${card('Total Suspense Amount', fmtMoney(c.totalAmountPaise), `${entries(c.totalCount)} recorded`)}
-    ${card('Open Amount', fmtMoney(c.openAmountPaise), `${entries(c.openCount)} pending`, 'open')}
-    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `${entries(c.closedCount)} settled`, 'closed')}
+    ${card('Open Amount', fmtMoney(c.openAmountPaise), `Still pending · ${entries(c.openCount)}`, 'open')}
+    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `Settled · ${entries(c.closedCount)}`, 'closed')}
     ${card(
       'Open Entries',
       c.openCount,
       c.openCount ? `Oldest pending: ${fmtDays(c.oldestOpenDays)}` : 'Nothing pending'
     )}
-    ${card('Total Entries', c.totalCount, `${c.openCount} open · ${c.closedCount} closed`)}
   </div>`;
 }
 
