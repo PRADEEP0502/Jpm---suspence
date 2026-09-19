@@ -248,10 +248,20 @@ async function main() {
   } catch (err) {
     console.error('\n  Could not connect to the database.\n');
     console.error(`  ${err.message}\n`);
-    console.error('  Things to check:');
-    console.error('   - .env has the correct MONGODB_URI (user name, password, cluster)');
-    console.error('   - in MongoDB Atlas, Network Access allows this computer’s IP address');
-    console.error('   - this computer is online\n');
+    if (config.ON_HOSTED_PLATFORM) {
+      console.error('  This app is running on a hosting platform, so settings come from the service, not from a .env file.');
+      console.error('  Check, in the hosting dashboard (Render: your service -> Environment):');
+      console.error('   - MONGODB_URI is set to the Atlas connection string (with the real user name and password)');
+      console.error(`   - MONGODB_DB is set (currently "${config.MONGODB_DB}")`);
+      console.error('  And in MongoDB Atlas -> Network Access, allow 0.0.0.0/0');
+      console.error('  (hosting platforms have no fixed IP address, so a single-address rule blocks them).\n');
+    } else {
+      console.error('  Things to check:');
+      console.error('   - there is a .env file next to server.js (copy .env.example and fill it in)');
+      console.error('   - .env has the correct MONGODB_URI (user name, password, cluster)');
+      console.error('   - in MongoDB Atlas, Network Access allows this computer’s IP address');
+      console.error('   - this computer is online\n');
+    }
     process.exit(1);
   }
 

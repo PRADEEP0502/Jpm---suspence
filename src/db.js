@@ -74,9 +74,8 @@ async function connectWithRetry(uri, attempts = 3) {
 async function openDatabase() {
   if (!config.MONGODB_URI) {
     throw new Error(
-      'No database connection string. Create a .env file next to server.js containing:\n' +
-        '  MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/?retryWrites=true&w=majority\n' +
-        '(copy .env.example to .env and fill in your details)'
+      'No database connection string (MONGODB_URI). Expected something like:\n' +
+        '  mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority'
     );
   }
 
