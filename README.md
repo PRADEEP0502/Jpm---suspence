@@ -40,7 +40,31 @@ Other office computers can use the **Network** address printed in the server win
 
 > Keep the server window open while people are using the dashboard; closing it stops the application. Every change is saved as soon as it is made, so nothing is lost when it stops.
 
-## 2. First login
+## 2. Putting it online (Render)
+
+The repository is connected to [Render](https://render.com), so **every push to `main` deploys automatically**. Staff can then open the dashboard from anywhere, not only the office network.
+
+Set these once in Render → your service → **Environment**:
+
+| Key | Value |
+|-----|-------|
+| `MONGODB_URI` | your Atlas connection string (the same one as in `.env`) |
+| `MONGODB_DB` | `jpm_suspense` |
+| `APP_TIMEZONE` | `Asia/Kolkata` |
+| `COOKIE_SECURE` | `true` |
+| `AUTO_BACKUP` | `false` |
+
+Also in MongoDB Atlas → **Network Access**, allow `0.0.0.0/0` (access from anywhere). Render’s free plan has no fixed IP address, so the database cannot be limited to one address; the login and password are what protect it, which is why the password must be strong and private.
+
+`render.yaml` in this repository already sets the build command (`npm ci --omit=dev`), start command (`npm start`) and the health check path (`/api/health`).
+
+Notes for the free plan:
+
+- The service sleeps after about 15 minutes with no visitors; the first request afterwards takes a few seconds to wake it.
+- Render’s disk is wiped on each deploy, so run `npm run backup` from an office computer (it writes a copy of the same cloud database to `data/backups`).
+- Check **https://your-service.onrender.com/api/health** after a deploy: `"ok": true` means the app reached MongoDB.
+
+## 3. First login
 
 | Login ID | Temporary password |
 |----------|--------------------|
@@ -48,7 +72,7 @@ Other office computers can use the **Network** address printed in the server win
 
 You will be asked to set a new password straight away. After that, open **Users** to create logins for office staff.
 
-## 3. Who can do what
+## 4. Who can do what
 
 | | View user (no login) | Entry User | Administrator |
 |---|:-:|:-:|:-:|
@@ -61,7 +85,7 @@ You will be asked to set a new password straight away. After that, open **Users*
 
 **Menus:** view users see **Dashboard · All Suspense · Closed History · Person Summary**. Entry users also see **Manage Entries**, and administrators also see **Users**. View users have no Add, Edit, Close or Delete buttons anywhere. **Logout** is at the top right.
 
-## 4. Daily use (Manage Entries)
+## 5. Daily use (Manage Entries)
 
 1. **Add**: click **+ Add Suspense Entry** and fill in the Date Given, Given To, Particulars (type it, or tap a quick-pick such as *Travel*), Amount, and an optional Remark. The **SRN**, Status (**OPEN**), Created By and Created Date are filled in automatically.
 2. **Edit**: click **Edit** on an open entry to correct its Date, Given To, Particulars, Amount or Remark. **The SRN never changes.**
@@ -69,7 +93,7 @@ You will be asked to set a new password straight away. After that, open **Users*
 
 In the table, open entries show **Edit** and **Close**; closed entries show **View**. Click any row to see the full record, including created/updated information and the change history.
 
-## 5. Search and filters
+## 6. Search and filters
 
 - **One search box** finds an SRN, a name (Given To) or particulars. Typing `SRN-001` (or `srn 1`) shows exactly that record; `Ashok` shows all of Ashok's entries; `Stationery` shows all stationery-related entries.
 - **All / Open / Closed** switches which entries are listed. The **All Suspense** page lists every entry (open and closed, newest first) with its open and closed totals.
@@ -77,7 +101,7 @@ In the table, open entries show **Edit** and **Close**; closed entries show **Vi
 - The Dashboard lists **open entries only** — settled ones live in Closed History, and both together on All Suspense.
 - On the Dashboard, clicking a name in the **Person-wise Summary** opens that person’s page, and clicking an **Aging Summary** group lists the open entries in that age range.
 
-## 6. On phones and tablets
+## 7. On phones and tablets
 
 The same pages work on any device; the layout adapts to the screen:
 
@@ -86,7 +110,7 @@ The same pages work on any device; the layout adapts to the screen:
 - Summary cards and aging groups become full-width rows on phones, the menu shows every page instead of scrolling sideways, and dialogs open as full-screen sheets with the buttons within thumb reach.
 - Printing always uses the full table, whatever the screen size.
 
-## 7. How the figures are calculated
+## 8. How the figures are calculated
 
 Every figure is calculated from the database each time the page loads. Nothing is hardcoded.
 
@@ -112,7 +136,7 @@ Every figure is calculated from the database each time the page loads. Nothing i
 | 31–60 | Critical |
 | more than 60 | Very Critical |
 
-## 8. Data safety and audit
+## 9. Data safety and audit
 
 - **Closed entries are never removed.** They stay in Closed History permanently.
 - Each entry stores **SRN, Created Date, Created By, Updated Date, Updated By, Closed Date, Closed By and Closing Remark**, plus a change history recording every add, edit and close, with who did it and when.
@@ -131,7 +155,7 @@ npm run restore -- data/backups/backup-2026-09-18.json  # load a copy into an EM
 
 Backups never contain passwords, and a restore refuses to run into a database that already has entries. Paid Atlas plans add automatic point-in-time backups.
 
-## 9. Common tasks
+## 10. Common tasks
 
 **Forgot the administrator password.** Stop the server, then run:
 
@@ -150,7 +174,7 @@ npm start
 
 A clean database also recreates the `admin` / `Admin@123` login, and numbering starts again at SRN-001.
 
-## 10. Settings (optional)
+## 11. Settings (optional)
 
 Set these as environment variables before starting the server:
 

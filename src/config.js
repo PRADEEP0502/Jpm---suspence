@@ -33,6 +33,9 @@ loadEnvFile();
 
 const flag = (name, fallback) => String(process.env[name] ?? fallback).toLowerCase() !== 'false';
 
+// Render (and most hosts) put a proxy in front of the app and serve it over HTTPS.
+const ON_HOSTED_PLATFORM = Boolean(process.env.RENDER || process.env.FLY_APP_NAME || process.env.DYNO);
+
 module.exports = {
   ENV_FILE,
   MONGODB_URI: process.env.MONGODB_URI || '',
@@ -47,7 +50,10 @@ module.exports = {
   ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'Admin@123',
   SESSION_HOURS: Number(process.env.SESSION_HOURS) || 12,
-  COOKIE_SECURE: String(process.env.COOKIE_SECURE || 'false').toLowerCase() === 'true',
+  COOKIE_SECURE: String(process.env.COOKIE_SECURE || (ON_HOSTED_PLATFORM ? 'true' : 'false')).toLowerCase() === 'true',
+  // Behind a proxy the real visitor IP comes from X-Forwarded-For; needed for login rate limiting.
+  TRUST_PROXY: process.env.TRUST_PROXY || (ON_HOSTED_PLATFORM ? 1 : 'loopback'),
+  ON_HOSTED_PLATFORM,
   BACKUP_DIR: path.resolve(process.env.BACKUP_DIR || path.join(__dirname, '..', 'data', 'backups')),
   BACKUP_KEEP_DAYS: Number(process.env.BACKUP_KEEP_DAYS) || 30,
   AUTO_BACKUP: flag('AUTO_BACKUP', 'true'),

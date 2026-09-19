@@ -51,7 +51,7 @@ const wrapWrite = (fn) =>
 function buildApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 'loopback');
+  app.set('trust proxy', config.TRUST_PROXY);
 
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');

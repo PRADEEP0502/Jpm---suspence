@@ -1,0 +1,26 @@
+# Render deployment blueprint.
+# MONGODB_URI is marked sync:false: set it in the Render dashboard
+# (Environment tab) so the database password never lives in this repository.
+services:
+  - type: web
+    name: jpm-suspense-dashboard
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: jpm_suspense
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: COOKIE_SECURE
+        value: 'true'
+      # Render's disk is wiped on every deploy, so take backups with `npm run backup`
+      # from an office computer instead of writing them here.
+      - key: AUTO_BACKUP
+        value: 'false'
+      - key: NODE_VERSION
+        value: '20'
