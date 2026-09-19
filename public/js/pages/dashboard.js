@@ -16,7 +16,6 @@ export const CLOSED_COLUMNS = [
   'closingRemark',
   'status',
 ];
-const ALL_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'age', 'status', 'closedDate'];
 
 export function render(main) {
   setHtml(
@@ -65,17 +64,13 @@ export function render(main) {
       </div>`
   );
 
+  // Only pending entries here; settled ones live in Closed History.
   const listEl = $('[data-role="list"]', main);
   const list = mountEntryList(listEl, {
     id: 'dashboard',
-    statusChoices: [
-      ['ALL', 'All'],
-      ['OPEN', 'Open'],
-      ['CLOSED', 'Closed'],
-    ],
+    title: () => 'Current Open Suspense',
     defaultStatus: 'OPEN',
-    columns: (status) => (status === 'OPEN' ? OPEN_COLUMNS : status === 'CLOSED' ? CLOSED_COLUMNS : ALL_COLUMNS),
-    dateField: (status) => (status === 'CLOSED' ? 'closed' : 'entry'),
+    columns: () => OPEN_COLUMNS,
   });
 
   const showInTable = (patch) => {
@@ -85,12 +80,13 @@ export function render(main) {
 
   $('[data-role="aging"]', main).addEventListener('click', (ev) => {
     const tile = ev.target.closest('[data-age]');
-    if (tile) showInTable({ status: 'OPEN', age: tile.dataset.age });
+    if (tile) showInTable({ age: tile.dataset.age });
   });
 
+  // A person's full picture (open and closed) is on the Person Summary page.
   $('[data-role="persons"]', main).addEventListener('click', (ev) => {
     const row = ev.target.closest('[data-whom]');
-    if (row) showInTable({ status: 'ALL', whom: row.dataset.whom });
+    if (row) location.hash = `#/persons/${encodeURIComponent(row.dataset.whom)}`;
   });
 
   async function loadSummary() {

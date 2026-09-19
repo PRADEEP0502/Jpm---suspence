@@ -52,7 +52,7 @@ You will be asked to set a new password straight away. After that, open **Users*
 
 | | View user (no login) | Entry User | Administrator |
 |---|:-:|:-:|:-:|
-| Dashboard: totals, open entries, search, filters, person-wise and particular-wise summaries | ✓ | ✓ | ✓ |
+| Dashboard: pending and settled amounts, open entries, aging, search, filters, person-wise and particular-wise summaries | ✓ | ✓ | ✓ |
 | All Suspense, Closed History and Person Summary pages (view only) | ✓ | ✓ | ✓ |
 | Manage Entries: **Add, Edit, Close** | | ✓ | ✓ |
 | Change history of an entry | | ✓ | ✓ |
@@ -74,7 +74,8 @@ In the table, open entries show **Edit** and **Close**; closed entries show **Vi
 - **One search box** finds an SRN, a name (Given To) or particulars. Typing `SRN-001` (or `srn 1`) shows exactly that record; `Ashok` shows all of Ashok's entries; `Stationery` shows all stationery-related entries.
 - **All / Open / Closed** switches which entries are listed. The **All Suspense** page lists every entry (open and closed, newest first) with its open and closed totals.
 - **Filters** narrow the list further by **Given To**, **Date** (from/to), **Age** group and **Amount** (from/to).
-- On the Dashboard, clicking a name in the **Person-wise Summary** lists that person's entries, and clicking an **Aging Summary** group lists the open entries in that age range.
+- The Dashboard lists **open entries only** — settled ones live in Closed History, and both together on All Suspense.
+- On the Dashboard, clicking a name in the **Person-wise Summary** opens that person’s page, and clicking an **Aging Summary** group lists the open entries in that age range.
 
 ## 6. On phones and tablets
 
