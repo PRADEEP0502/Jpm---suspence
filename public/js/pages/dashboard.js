@@ -1,5 +1,5 @@
 import { html, setHtml, $, api, fmtDate } from '../lib.js';
-import { state } from '../state.js';
+import { setToday } from '../state.js';
 import { summaryCards, groupTable, agingTiles } from '../ui.js';
 import { mountEntryList } from '../entry-list.js';
 
@@ -24,10 +24,7 @@ export function render(main) {
     html`<div class="page-head">
         <div>
           <h1 class="page-title">Dashboard</h1>
-          <p class="page-sub">
-            Suspense position as of <strong data-role="as-of">${fmtDate(state.today)}</strong>. All figures are
-            calculated from the latest entries.
-          </p>
+          <p class="page-sub">All figures are calculated from the latest entries.</p>
         </div>
       </div>
 
@@ -99,7 +96,10 @@ export function render(main) {
   async function loadSummary() {
     try {
       const data = await api('GET', '/api/dashboard');
-      $('[data-role="as-of"]', main).textContent = fmtDate(data.today);
+      // Keep the "As of" date in the header current, even if the page is left open overnight.
+      setToday(data.today);
+      const asOf = document.getElementById('asOf');
+      if (asOf) asOf.textContent = fmtDate(data.today);
       setHtml($('[data-role="cards"]', main), summaryCards(data.cards));
       setHtml(
         $('[data-role="persons"]', main),
