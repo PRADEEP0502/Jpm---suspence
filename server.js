@@ -8,15 +8,17 @@
  * Data is stored in MongoDB (Atlas or any MongoDB server). The connection string lives in .env,
  * which is never committed - copy .env.example to .env and fill in your details.
  *
- * Optional settings (environment variables or .env): PORT, HOST, APP_TIMEZONE, MONGODB_DB,
- * SEED_SAMPLE_DATA, ADMIN_USERNAME, ADMIN_PASSWORD, SESSION_HOURS, COOKIE_SECURE,
- * BACKUP_DIR, BACKUP_KEEP_DAYS, AUTO_BACKUP.
+ * Access control is enforced HERE, on every request (see src/permissions.js):
+ *   NORMAL  own records, view only        ENTRY  all records, add/edit/return
+ *   ADMIN   full access                   MD     full access
+ * Nothing is public except the sign-in page and the connection health check.
  */
 
 const os = require('os');
 const path = require('path');
 const express = require('express');
 
+const pkg = require('./package.json');
 const config = require('./src/config');
 const db = require('./src/db');
 const auth = require('./src/auth');
@@ -25,10 +27,14 @@ const users = require('./src/users');
 const audit = require('./src/audit');
 const backup = require('./src/backup');
 const events = require('./src/events');
+const reports = require('./src/reports');
+const permissions = require('./src/permissions');
 const { seedSampleData } = require('./src/seed');
 const { HttpError, AGE_BUCKETS, DEFAULT_PARTICULARS, TIMEZONE, todayISO } = require('./src/util');
 
 const startedAt = new Date();
+const { requirePermission, requireLogin } = auth;
+const can = permissions.can;
 
 /** Wrap a route handler: send whatever it returns as JSON, and pass errors to the error handler. */
 const wrap = (fn) => async (req, res, next) => {
@@ -47,6 +53,25 @@ const wrapWrite = (fn) =>
     events.notifyChanged();
     return result;
   });
+
+/**
+ * A user who may only see their own records must not even ask for someone else's. Any request that
+ * names another person or user (userId=..., whom=..., ...) is refused outright. The queries are
+ * ALSO limited to the caller's own records in the database (src/entries.js), so this is a second wall.
+ */
+function ownScopeGuard(req, _res, next) {
+  if (!req.user || can(req.user, 'entries:viewAll')) return next();
+  const mine = new Set([req.user.id, req.user.username, req.user.displayName].map((s) => String(s).toLowerCase()));
+  for (const key of ['userId', 'givenToUserId', 'employeeId', 'user', 'username', 'person', 'whom', 'givenTo']) {
+    const raw = req.query[key];
+    if (raw === undefined || raw === '') continue;
+    const values = Array.isArray(raw) ? raw : [raw];
+    if (values.some((v) => !mine.has(String(v).toLowerCase()))) {
+      return next(new HttpError(403, 'You can only view your own records.', { code: 'FORBIDDEN' }));
+    }
+  }
+  next();
+}
 
 function buildApp() {
   const app = express();
@@ -75,29 +100,15 @@ function buildApp() {
     next();
   });
 
-  /** Is the app connected to the database? Useful for monitoring and for checking a new setup. */
+  // ---- Public: sign-in, session info and a bare connection check (no data)
   api.get(
     '/health',
     wrap(async () => {
       const ping = await db.ping();
-      return {
-        ok: ping.connected,
-        database: config.MONGODB_DB,
-        connected: ping.connected,
-        responseMs: ping.responseMs,
-        error: ping.error,
-        entries: ping.connected ? await db.collections.entries().countDocuments({ isDeleted: false }) : null,
-        liveScreens: events.clientCount(),
-        today: todayISO(),
-        startedAt: startedAt.toISOString(),
-      };
+      return { ok: ping.connected, connected: ping.connected, responseMs: ping.responseMs, today: todayISO() };
     })
   );
 
-  /** Live updates: the browser keeps this open and is told whenever entries change. */
-  api.get('/events', (req, res) => events.addClient(req, res));
-
-  // Session & app configuration
   api.get(
     '/bootstrap',
     wrap((req) => ({
@@ -106,6 +117,7 @@ function buildApp() {
       timezone: TIMEZONE,
       ageBuckets: AGE_BUCKETS,
       defaultParticulars: DEFAULT_PARTICULARS,
+      roles: permissions.ROLES.map((r) => ({ key: r, label: permissions.ROLE_LABELS[r] })),
     }))
   );
 
@@ -128,84 +140,135 @@ function buildApp() {
     wrap(async (req) => ({ user: await auth.changePassword(req, req.body.currentPassword, req.body.newPassword) }))
   );
 
-  // Dashboard data (everyone, view-only)
-  api.get('/dashboard', wrap(() => entries.dashboardSummary()));
+  // ---- Everything below needs a signed-in user with the right permission
+  api.get('/events', requireLogin, (req, res) => events.addClient(req, res));
 
-  api.get('/lookups', wrap(() => entries.lookups()));
+  const view = requirePermission('own:view', 'entries:viewAll');
 
-  api.get(
-    '/entries',
-    wrap((req) => {
-      const status = String(req.query.status || 'ALL').toUpperCase();
-      if (status === 'DELETED' && (!req.user || req.user.role !== 'ADMIN')) {
-        throw new HttpError(403, 'Only an administrator can do this.');
-      }
-      return entries.listEntries(req.query);
-    })
-  );
+  api.get('/dashboard', view, ownScopeGuard, wrap((req) => entries.dashboardSummary(req.user)));
+  api.get('/lookups', requirePermission('entries:viewAll'), wrap((req) => entries.lookups(req.user)));
 
-  api.get('/entries/next-srn', auth.requireLogin, wrap(async () => ({ srn: await entries.nextSrn() })));
-
-  api.get(
-    '/entries/:id',
+  // Suspense entries. Also reachable as /api/suspense.
+  const suspense = express.Router();
+  suspense.get('/', view, ownScopeGuard, wrap((req) => entries.listEntries(req.query, req.user)));
+  suspense.get('/next-srn', requirePermission('entries:add'), wrap(async () => ({ srn: await entries.nextSrn() })));
+  suspense.get(
+    '/:id',
+    view,
+    ownScopeGuard,
     wrap(async (req) => {
-      const isAdmin = req.user && req.user.role === 'ADMIN';
-      const entry = await entries.getEntry(req.params.id, { includeDeleted: isAdmin });
+      const entry = await entries.getEntry(req.params.id, req.user);
       if (!entry) throw new HttpError(404, 'Entry not found.');
-      // Change history is shown to logged-in staff only.
-      const history = req.user ? await audit.historyForEntry(entry.id) : undefined;
+      // The internal change history is for staff who can see everything.
+      const history = can(req.user, 'entries:viewAll') ? await audit.historyForEntry(entry.id) : undefined;
       return { entry, history };
     })
   );
-
-  api.post(
-    '/entries',
-    auth.requireLogin,
+  suspense.post(
+    '/',
+    requirePermission('entries:add'),
     wrapWrite(async (req) => ({ entry: await entries.createEntry(req.body, req.user) }))
   );
-  api.put(
-    '/entries/:id',
-    auth.requireLogin,
+  suspense.put(
+    '/:id',
+    requirePermission('entries:edit'),
     wrapWrite(async (req) => ({ entry: await entries.updateEntry(req.params.id, req.body, req.user) }))
   );
-  api.post(
-    '/entries/:id/returns',
-    auth.requireLogin,
+  suspense.post(
+    '/:id/returns',
+    requirePermission('entries:return'),
     wrapWrite(async (req) => ({ entry: await entries.addReturn(req.params.id, req.body, req.user) }))
   );
-  api.post(
-    '/entries/:id/close',
-    auth.requireLogin,
-    wrapWrite(async (req) => ({ entry: await entries.closeEntry(req.params.id, req.body, req.user) }))
+  suspense.post(
+    '/:id/close',
+    requirePermission('entries:close'),
+    wrapWrite(async (req) => ({ entry: await entries.closeEntry(req.params.id) }))
   );
-  api.post(
-    '/entries/:id/reopen',
-    auth.requireAdmin,
+  suspense.post(
+    '/:id/reopen',
+    requirePermission('entries:reopen'),
     wrapWrite(async (req) => ({ entry: await entries.reopenEntry(req.params.id, req.body, req.user) }))
   );
-  api.post(
-    '/entries/:id/delete',
-    auth.requireAdmin,
+  suspense.post(
+    '/:id/delete',
+    requirePermission('entries:delete'),
     wrapWrite(async (req) => ({ entry: await entries.deleteEntry(req.params.id, req.body, req.user) }))
   );
-  api.post(
-    '/entries/:id/restore',
-    auth.requireAdmin,
+  suspense.post(
+    '/:id/restore',
+    requirePermission('entries:delete'),
     wrapWrite(async (req) => ({ entry: await entries.restoreEntry(req.params.id, req.user) }))
   );
+  api.use('/entries', suspense);
+  api.use('/suspense', suspense);
 
-  // User management (admin)
-  api.get('/users', auth.requireAdmin, wrap(async () => ({ users: await users.listUsers() })));
-  api.post('/users', auth.requireAdmin, wrap(async (req) => ({ user: await users.createUser(req.body, req.user) })));
+  // ---- User management: Admin and MD only
+  api.get('/users', requirePermission('users:manage'), wrap(async () => ({ users: await users.listUsers() })));
+  api.post(
+    '/users',
+    requirePermission('users:manage'),
+    wrapWrite(async (req) => ({ user: await users.createUser(req.body, req.user) }))
+  );
   api.put(
     '/users/:id',
-    auth.requireAdmin,
-    wrap(async (req) => ({ user: await users.updateUser(req.params.id, req.body, req.user) }))
+    requirePermission('users:manage'),
+    wrapWrite(async (req) => ({ user: await users.updateUser(req.params.id, req.body, req.user) }))
   );
   api.post(
     '/users/:id/reset-password',
-    auth.requireAdmin,
+    requirePermission('users:manage'),
     wrap(async (req) => ({ user: await users.resetPassword(req.params.id, req.body, req.user) }))
+  );
+
+  // ---- Reports (CSV downloads): Admin and MD
+  api.get('/reports', requirePermission('reports:view'), wrap(() => ({ reports: reports.REPORT_LIST })));
+  api.get(
+    '/reports/:key.csv',
+    requirePermission('reports:view'),
+    wrap(async (req, res) => {
+      const csv = await reports.build(req.params.key, req.user);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="jpm-${req.params.key}-${todayISO()}.csv"`);
+      res.send(csv);
+    })
+  );
+
+  // ---- System settings and backup: Admin and MD
+  api.get(
+    '/system',
+    requirePermission('system:manage'),
+    wrap(async () => {
+      const ping = await db.ping();
+      return {
+        version: pkg.version,
+        database: config.MONGODB_DB,
+        connected: ping.connected,
+        responseMs: ping.responseMs,
+        timezone: TIMEZONE,
+        today: todayISO(),
+        sessionHours: config.SESSION_HOURS,
+        startedAt: startedAt.toISOString(),
+        liveScreens: events.clientCount(),
+        entries: await db.collections.entries().countDocuments({ isDeleted: false }),
+        roleCounts: await users.roleCounts(),
+        roles: permissions.ROLES.map((r) => ({
+          key: r,
+          label: permissions.ROLE_LABELS[r],
+          permissions: permissions.permissionsFor(r),
+        })),
+        permissions: permissions.PERMISSIONS,
+      };
+    })
+  );
+  api.get(
+    '/system/backup',
+    requirePermission('system:manage'),
+    wrap(async (req, res) => {
+      const data = await backup.exportAll();
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="jpm-backup-${todayISO()}.json"`);
+      res.send(JSON.stringify(data, null, 2));
+    })
   );
 
   api.use((_req, _res, next) => next(new HttpError(404, 'Not found.')));
@@ -271,9 +334,10 @@ async function main() {
   }
 
   const admin = await users.ensureDefaultAdmin();
+  let sample = null;
   if (info.isNew && config.SEED_SAMPLE_DATA) {
-    const n = await seedSampleData();
-    console.log(`[setup] Added ${n} sample suspense entries.`);
+    sample = await seedSampleData();
+    console.log(`[setup] Added ${sample.entries} sample suspense entries and ${sample.users.length} sample employee logins.`);
   }
   await db.syncSrnCounter();
   backup.startDailyBackups();
@@ -291,8 +355,13 @@ async function main() {
     lanAddresses().forEach((ip) => console.log(`  Network  : http://${ip}:${config.PORT}`));
     if (admin) {
       console.log('');
-      console.log(`  First-time admin login  ->  ID: ${admin.username}   Password: ${admin.password}`);
+      console.log(`  First-time admin login  ->  Employee ID: ${admin.username}   Password: ${admin.password}`);
       console.log('  (You will be asked to set a new password after the first login.)');
+    }
+    if (sample && sample.users.length) {
+      console.log('');
+      console.log('  Sample employee logins (each must set a new password at first login):');
+      sample.users.forEach((u) => console.log(`    ${u.username.padEnd(10)} ${u.role.padEnd(7)} password: ${u.password}`));
     }
     console.log('');
   });

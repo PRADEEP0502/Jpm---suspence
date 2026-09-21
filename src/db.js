@@ -90,6 +90,7 @@ async function openDatabase() {
   db = client.db(config.MONGODB_DB);
   healthy = true;
   await upgradeEntriesForReturns();
+  await upgradeForRoles();
   await ensureIndexes();
   const isNew =
     (await collections.entries().countDocuments({}, { limit: 1 })) === 0 &&
@@ -124,6 +125,40 @@ async function upgradeEntriesForReturns() {
   );
 }
 
+/**
+ * Role-based access upgrade (safe to run on every start):
+ *  - users get a lower-cased display name (used to link people to their records)
+ *  - entries get givenToUserId, the link that decides which records a Normal User may see
+ *  - closed entries get finalAgeDays, the age at the moment they were closed
+ */
+async function upgradeForRoles() {
+  const users = await collections.users().find({ displayNameLower: { $exists: false } }).toArray();
+  for (const u of users) {
+    await collections.users().updateOne({ _id: u._id }, { $set: { displayNameLower: String(u.displayName).toLowerCase() } });
+  }
+
+  const unlinked = await collections.entries().find({ givenToUserId: { $exists: false } }).project({ whomLower: 1 }).toArray();
+  if (unlinked.length) {
+    const byName = new Map();
+    for (const u of await collections.users().find({}).toArray()) byName.set(u.displayNameLower, u._id);
+    let linked = 0;
+    for (const e of unlinked) {
+      const userId = byName.get(e.whomLower) || null;
+      if (userId) linked += 1;
+      await collections.entries().updateOne({ _id: e._id }, { $set: { givenToUserId: userId } });
+    }
+    console.log(`[setup] Linked ${linked} of ${unlinked.length} existing entries to employee logins.`);
+  }
+
+  const closed = await collections.entries().find({ status: 'CLOSED', finalAgeDays: { $exists: false } }).toArray();
+  for (const e of closed) {
+    const [y1, m1, d1] = String(e.entryDate).split('-').map(Number);
+    const [y2, m2, d2] = String(e.closedDate || e.entryDate).split('-').map(Number);
+    const days = Math.max(0, Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000));
+    await collections.entries().updateOne({ _id: e._id }, { $set: { finalAgeDays: days } });
+  }
+}
+
 async function ensureIndexes() {
   await collections.entries().createIndexes([
     { key: { srn: 1 }, unique: true, name: 'srn_unique' },
@@ -132,8 +167,15 @@ async function ensureIndexes() {
     { key: { entryDate: 1 }, name: 'entry_date' },
     { key: { whomLower: 1 }, name: 'whom' },
     { key: { particularsLower: 1 }, name: 'particulars' },
+    { key: { givenToUserId: 1, isDeleted: 1 }, name: 'given_to_user' },
   ]);
   await collections.users().createIndexes([{ key: { usernameLower: 1 }, unique: true, name: 'username_unique' }]);
+  try {
+    // One login per person name, so a name can never link to two different employees.
+    await collections.users().createIndexes([{ key: { displayNameLower: 1 }, unique: true, name: 'display_name_unique' }]);
+  } catch (err) {
+    console.warn('[db] Could not enforce unique employee names (two logins share a name):', err.message.split(String.fromCharCode(10))[0]);
+  }
   await collections.sessions().createIndexes([
     { key: { expiresAt: 1 }, expireAfterSeconds: 0, name: 'session_expiry' },
     { key: { userId: 1 }, name: 'session_user' },

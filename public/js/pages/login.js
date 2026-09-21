@@ -6,12 +6,12 @@ export function render(main, _params, { onLoggedIn }) {
     html`<div class="login-wrap">
       <section class="panel login-card">
         <div class="login-head">
-          <h1 class="page-title">Entry / Admin Login</h1>
-          <p class="page-sub">For staff who add, edit and close suspense entries.</p>
+          <h1 class="page-title">Sign in</h1>
+          <p class="page-sub">Use your Employee ID and password to see your suspense records.</p>
         </div>
         <form class="form" novalidate>
           <div class="field">
-            <label for="l-user">Login ID</label>
+            <label for="l-user">Username / Employee ID</label>
             <input id="l-user" name="username" type="text" autocomplete="username" autocapitalize="none" />
           </div>
           <div class="field">
@@ -19,11 +19,9 @@ export function render(main, _params, { onLoggedIn }) {
             <input id="l-pass" name="password" type="password" autocomplete="current-password" />
           </div>
           <div class="form-error" role="alert" hidden></div>
-          <button type="submit" class="btn btn--primary btn--block btn--lg">Login</button>
+          <button type="submit" class="btn btn--primary btn--block btn--lg">Sign In</button>
         </form>
-        <p class="login-note">
-          Only need to view? The <a href="#/dashboard">dashboard</a> is open to everyone without login.
-        </p>
+        <p class="login-note">Forgot your password? Ask an Administrator to reset it.</p>
       </section>
     </div>`
   );
@@ -35,9 +33,9 @@ export function render(main, _params, { onLoggedIn }) {
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     clearFieldErrors(form);
-    if (!form.username.value.trim()) return showFieldError(form, 'username', 'Enter your login ID.');
+    if (!form.username.value.trim()) return showFieldError(form, 'username', 'Enter your Employee ID.');
     if (!form.password.value) return showFieldError(form, 'password', 'Enter your password.');
-    await withBusy(btn, 'Logging in…', async () => {
+    await withBusy(btn, 'Signing in…', async () => {
       try {
         const res = await api('POST', '/api/auth/login', {
           username: form.username.value.trim(),

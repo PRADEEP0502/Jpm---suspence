@@ -1,31 +1,31 @@
 'use strict';
 
 /**
- * Suspense entry lifecycle, partial returns and all dashboard calculations (MongoDB).
+ * Suspense entries, returns, ownership and all dashboard calculations (MongoDB).
  *
- * Every entry gets a permanent SRN (Suspense Reference Number: SRN-001, SRN-002, ...) when it is
- * created. The number comes from an atomic counter, is never reused, and never changes - not on
- * edit, not when money is returned, not on close.
+ * SRN (Suspense Reference Number): SRN-001, SRN-002, ... from an atomic counter; never reused and
+ * never changed - not by an edit, a return or the closing of the entry.
  *
- * Money model (the Original Amount is never overwritten):
+ * Money (the Original Amount is never overwritten):
+ *   Original Amount   what was handed over
+ *   Returns[]         every return: date, returned by, amount, remark, who recorded it
+ *   Returned Amount   total of the returns
+ *   Balance Amount    Original - Returned
  *
- *   Original Amount  - what was handed over, fixed for ever
- *   Returns[]        - each time the person gives money back: date, returned by, amount, remark
- *   Returned Amount  - the total of those returns
- *   Balance Amount   - Original - Returned
+ *   OPEN       nothing returned yet
+ *   PARTIAL    something returned, balance still outstanding    ("Partially Settled")
+ *   CLOSED     balance is zero. This happens by itself when the last return is recorded;
+ *              there is no manual close while any balance remains.
  *
- *   OPEN      balance = original (nothing returned yet)
- *   PARTIAL   something returned, balance still outstanding   ("Partially Settled")
- *   CLOSED    balance is zero; closed date and closed by are recorded automatically
- *
- *   CLOSED --reopen--> previous state   (admin only, reason required, audited)
- *   any    --delete--> deleted flag     (admin only, soft delete, reason required, restorable)
- *
- * Nothing is ever physically removed from the entries collection.
+ * Who can see what is decided here, in the database query - not in the browser:
+ *   users with "entries:viewAll" (Entry User, Admin, MD) see every entry;
+ *   everyone else sees only entries linked to their own login (givenToUserId).
  */
 
 const db = require('./db');
 const audit = require('./audit');
+const users = require('./users');
+const permissions = require('./permissions');
 const {
   AGE_BUCKETS,
   DEFAULT_PARTICULARS,
@@ -40,13 +40,34 @@ const {
   parseAmountToPaise,
   escapeRegex,
   daysBetween,
+  formatRupees,
 } = require('./util');
 
-// PENDING = anything still owed (OPEN or PARTIAL) - what the dashboard shows.
+// PENDING = anything still owed (OPEN or PARTIAL).
 const LIST_STATUSES = ['PENDING', 'OPEN', 'PARTIAL', 'CLOSED', 'ALL', 'DELETED'];
 
-/** Age in whole days: (closed date, or today while money is still owed) - the date it was given. */
+// ---------------------------------------------------------------------------
+// Who may see what
+// ---------------------------------------------------------------------------
+
+/** Database filter that limits a query to the records this user is allowed to see. */
+function scopeFilter(user) {
+  if (permissions.can(user, 'entries:viewAll')) return {};
+  if (permissions.can(user, 'own:view')) {
+    const id = db.toObjectId(user.id);
+    if (id) return { givenToUserId: id };
+  }
+  throw new HttpError(403, 'You do not have permission to view suspense records.', { code: 'FORBIDDEN' });
+}
+
+const canSeeDeleted = (user) => permissions.can(user, 'entries:delete');
+
+// ---------------------------------------------------------------------------
+// Mapping
+// ---------------------------------------------------------------------------
+
 function ageOf(doc, today) {
+  if (doc.status === 'CLOSED' && typeof doc.finalAgeDays === 'number') return doc.finalAgeDays;
   return Math.max(0, daysBetween(doc.entryDate, doc.closedDate || today));
 }
 
@@ -72,7 +93,6 @@ function mapEntry(doc, today) {
   const ageDays = ageOf(doc, today);
   const bucket = bucketForAge(ageDays);
   const returnedPaise = doc.returnedPaise || 0;
-  const balancePaise = doc.amountPaise - returnedPaise;
   return {
     id: String(doc._id),
     srnNo: doc.srnNo,
@@ -80,9 +100,9 @@ function mapEntry(doc, today) {
     entryDate: doc.entryDate,
     whom: doc.whom,
     particulars: doc.particulars,
-    amountPaise: doc.amountPaise, // Original Amount - never changes once money is returned
+    amountPaise: doc.amountPaise, // Original Amount
     returnedPaise,
-    balancePaise,
+    balancePaise: doc.amountPaise - returnedPaise,
     returns: (doc.returns || []).map(mapReturn),
     returnCount: (doc.returns || []).length,
     remark: doc.remark ?? null,
@@ -94,7 +114,6 @@ function mapEntry(doc, today) {
     closedDate: doc.closedDate ?? null,
     closedAt: doc.closedAt ?? null,
     closedBy: doc.closedBy ?? null,
-    closingRemark: doc.closingRemark ?? null,
     isDeleted: !!doc.isDeleted,
     deletedAt: doc.deletedAt ?? null,
     deletedBy: doc.deletedBy ?? null,
@@ -134,22 +153,27 @@ function checkVersion(doc, version) {
 }
 
 // ---------------------------------------------------------------------------
-// Reads
+// Reads (always scoped to what the caller may see)
 // ---------------------------------------------------------------------------
 
-async function getEntry(id, { includeDeleted = false } = {}) {
-  const doc = await findDoc(id);
-  if (!doc || (doc.isDeleted && !includeDeleted)) return null;
-  return mapEntry(doc, todayISO());
+/** One entry, or null when it does not exist OR belongs to someone else (never reveals which). */
+async function getEntry(id, user) {
+  const _id = db.toObjectId(id);
+  if (!_id) return null;
+  const filter = { _id, ...scopeFilter(user) };
+  if (!canSeeDeleted(user)) filter.isDeleted = false;
+  const doc = await db.collections.entries().findOne(filter);
+  return doc ? mapEntry(doc, todayISO()) : null;
 }
 
-async function listEntries(query = {}) {
+async function listEntries(query, user) {
   const today = todayISO();
-  const filter = {};
+  const filter = { ...scopeFilter(user) };
 
   const requested = String(query.status || 'ALL').toUpperCase();
   const status = LIST_STATUSES.includes(requested) ? requested : 'ALL';
   if (status === 'DELETED') {
+    if (!canSeeDeleted(user)) throw new HttpError(403, 'You do not have permission to do this.', { code: 'FORBIDDEN' });
     filter.isDeleted = true;
   } else {
     filter.isDeleted = false;
@@ -186,7 +210,6 @@ async function listEntries(query = {}) {
   const docs = await db.collections.entries().find(filter).sort({ srnNo: -1 }).toArray();
   let entries = docs.map((doc) => mapEntry(doc, today));
 
-  // Age depends on today (still owed) or the closing date, so it is applied here.
   const bucket = AGE_BUCKETS.find((b) => b.key === query.age);
   if (bucket) {
     entries = entries.filter((e) => e.ageDays >= bucket.min && (bucket.max === null || e.ageDays <= bucket.max));
@@ -204,11 +227,27 @@ async function listEntries(query = {}) {
   return { today, status, entries, totals };
 }
 
-/** Everything the dashboard needs, calculated from the live (non-deleted) entries. */
-async function dashboardSummary() {
+/** Dashboard figures, calculated from the entries this user is allowed to see. */
+async function dashboardSummary(user) {
   const today = todayISO();
-  const docs = await db.collections.entries().find({ isDeleted: false }).toArray();
+  const docs = await db.collections.entries().find({ isDeleted: false, ...scopeFilter(user) }).toArray();
   const entries = docs.map((doc) => mapEntry(doc, today));
+
+  const cards = {
+    totalCount: 0,
+    totalOriginalPaise: 0, // TOTAL SUSPENSE AMOUNT: everything ever given
+    totalReturnedPaise: 0,
+    totalBalancePaise: 0,
+    openCount: 0, // OPEN ENTRIES
+    openAmountPaise: 0, // OPEN AMOUNT: balance of entries with nothing returned yet
+    partialCount: 0, // PARTIALLY SETTLED ENTRIES
+    partialAmountPaise: 0, // PARTIALLY SETTLED AMOUNT: balance still pending on them
+    partialOriginalPaise: 0,
+    closedCount: 0,
+    closedAmountPaise: 0, // CLOSED AMOUNT: what was given in entries now fully returned
+    pendingCount: 0,
+    oldestPendingDays: null,
+  };
 
   const blank = (name) => ({
     name,
@@ -220,11 +259,9 @@ async function dashboardSummary() {
     closedCount: 0,
     oldestPendingDays: null,
   });
-  const cards = blank('ALL');
   const persons = new Map();
   const particulars = new Map();
   const aging = AGE_BUCKETS.map((b) => ({ ...b, count: 0, amountPaise: 0 }));
-
   const group = (map, name) => {
     const key = name.toLowerCase();
     if (!map.has(key)) map.set(key, blank(name));
@@ -233,7 +270,31 @@ async function dashboardSummary() {
 
   for (const e of entries) {
     const pending = e.status !== 'CLOSED';
-    for (const g of [cards, group(persons, e.whom), group(particulars, e.particulars)]) {
+
+    cards.totalCount += 1;
+    cards.totalOriginalPaise += e.amountPaise;
+    cards.totalReturnedPaise += e.returnedPaise;
+    cards.totalBalancePaise += e.balancePaise;
+    if (e.status === 'OPEN') {
+      cards.openCount += 1;
+      cards.openAmountPaise += e.balancePaise;
+    } else if (e.status === 'PARTIAL') {
+      cards.partialCount += 1;
+      cards.partialAmountPaise += e.balancePaise;
+      cards.partialOriginalPaise += e.amountPaise;
+    } else {
+      cards.closedCount += 1;
+      cards.closedAmountPaise += e.amountPaise;
+    }
+    if (pending) {
+      cards.pendingCount += 1;
+      cards.oldestPendingDays = Math.max(cards.oldestPendingDays ?? 0, e.ageDays);
+      const b = aging.find((a) => a.key === e.ageBucket);
+      b.count += 1;
+      b.amountPaise += e.balancePaise; // aging is about money still outstanding
+    }
+
+    for (const g of [group(persons, e.whom), group(particulars, e.particulars)]) {
       g.totalCount += 1;
       g.originalAmountPaise += e.amountPaise;
       g.returnedAmountPaise += e.returnedPaise;
@@ -245,16 +306,9 @@ async function dashboardSummary() {
         g.closedCount += 1;
       }
     }
-    if (pending) {
-      const b = aging.find((a) => a.key === e.ageBucket);
-      b.count += 1;
-      b.amountPaise += e.balancePaise; // aging is about money still outstanding
-    }
   }
 
   const byName = (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
-  delete cards.name;
-
   return {
     today,
     cards,
@@ -268,8 +322,11 @@ async function dashboardSummary() {
   };
 }
 
-/** Names and particulars already in use, for type-ahead suggestions and the Given To filter. */
-async function lookups() {
+/** Names for the Given To and filter lists. Only for people who may see every record. */
+async function lookups(user) {
+  if (!permissions.can(user, 'entries:viewAll')) {
+    throw new HttpError(403, 'You do not have permission to do this.', { code: 'FORBIDDEN' });
+  }
   const uniq = (values) => {
     const seen = new Map();
     values.forEach((v) => {
@@ -279,12 +336,14 @@ async function lookups() {
     return [...seen.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   };
   const entries = db.collections.entries();
-  const [persons, used] = await Promise.all([
+  const [persons, used, employees] = await Promise.all([
     entries.distinct('whom', { isDeleted: false }),
     entries.distinct('particulars', { isDeleted: false }),
+    users.employeeNames(),
   ]);
   return {
-    persons: uniq(persons),
+    persons: uniq([...persons, ...employees.map((e) => e.name)]),
+    employees, // people with a login: records given to them are visible to them
     suggestedParticulars: uniq([...DEFAULT_PARTICULARS, ...used]),
   };
 }
@@ -328,24 +387,33 @@ function validateEntryInput(body, today) {
   return { entryDate, whom, particulars, amountPaise, remark: remark || null };
 }
 
-/** Reuse the existing spelling of a name/particular so "ashok" and "Ashok" group together. */
-async function canonicalSpelling(field, value, excludeId = null) {
-  if (!['whom', 'particulars'].includes(field)) throw new Error('Invalid field');
-  const filter = { [`${field}Lower`]: value.toLowerCase(), isDeleted: false };
+/**
+ * Settle the spelling of "Given To": a person with a login always uses that login's name (which is
+ * what links the record to them); otherwise reuse the spelling already used elsewhere.
+ * Returns the final name and the login it belongs to (or null).
+ */
+async function resolveGivenTo(name, excludeId = null) {
+  const person = await users.findByName(name);
+  if (person) return { whom: person.displayName, givenToUserId: person._id };
+  const filter = { whomLower: name.toLowerCase(), isDeleted: false };
   if (excludeId) filter._id = { $ne: excludeId };
   const doc = await db.collections.entries().find(filter).sort({ _id: 1 }).limit(1).next();
-  if (doc) return doc[field];
-  if (field === 'particulars') {
-    const standard = DEFAULT_PARTICULARS.find((p) => p.toLowerCase() === value.toLowerCase());
-    if (standard) return standard;
-  }
-  return value;
+  return { whom: doc ? doc.whom : name, givenToUserId: null };
+}
+
+async function canonicalParticulars(value, excludeId = null) {
+  const filter = { particularsLower: value.toLowerCase(), isDeleted: false };
+  if (excludeId) filter._id = { $ne: excludeId };
+  const doc = await db.collections.entries().find(filter).sort({ _id: 1 }).limit(1).next();
+  if (doc) return doc.particulars;
+  return DEFAULT_PARTICULARS.find((p) => p.toLowerCase() === value.toLowerCase()) || value;
 }
 
 async function createEntry(body, user) {
   const input = validateEntryInput(body, todayISO());
-  input.whom = await canonicalSpelling('whom', input.whom);
-  input.particulars = await canonicalSpelling('particulars', input.particulars);
+  const given = await resolveGivenTo(input.whom);
+  input.whom = given.whom;
+  input.particulars = await canonicalParticulars(input.particulars);
 
   const srnNo = await db.nextSrnNumber();
   const srn = formatSrn(srnNo);
@@ -356,6 +424,7 @@ async function createEntry(body, user) {
     entryDate: input.entryDate,
     whom: input.whom,
     whomLower: input.whom.toLowerCase(),
+    givenToUserId: given.givenToUserId,
     particulars: input.particulars,
     particularsLower: input.particulars.toLowerCase(),
     amountPaise: input.amountPaise,
@@ -367,7 +436,7 @@ async function createEntry(body, user) {
     closedAt: null,
     closedBy: null,
     closedByUserId: null,
-    closingRemark: null,
+    finalAgeDays: null,
     isDeleted: false,
     deletedAt: null,
     deletedBy: null,
@@ -390,17 +459,23 @@ async function updateEntry(id, body, user) {
   checkVersion(doc, body.version);
 
   const input = validateEntryInput(body, todayISO());
-  input.whom = await canonicalSpelling('whom', input.whom, doc._id);
-  input.particulars = await canonicalSpelling('particulars', input.particulars, doc._id);
+  const given = await resolveGivenTo(input.whom, doc._id);
+  input.whom = given.whom;
+  input.particulars = await canonicalParticulars(input.particulars, doc._id);
 
   // The Original Amount may be corrected, but never below what has already been returned.
   const returnedPaise = doc.returnedPaise || 0;
   if (input.amountPaise < returnedPaise) {
     throw new HttpError(
       400,
-      `Original amount cannot be less than the amount already returned (${(returnedPaise / 100).toFixed(2)}).`,
+      `Original amount cannot be less than the amount already returned (${formatRupees(returnedPaise)}).`,
       { field: 'amount' }
     );
+  }
+  if (input.entryDate > (doc.returns || []).reduce((min, r) => (r.returnDate < min ? r.returnDate : min), '9999-12-31')) {
+    throw new HttpError(400, 'The date given cannot be later than a return that is already recorded.', {
+      field: 'entryDate',
+    });
   }
 
   const current = {
@@ -416,10 +491,18 @@ async function updateEntry(id, body, user) {
   }
   if (Object.keys(changes).length === 0) return mapEntry(doc, todayISO());
 
+  // Lowering the amount to exactly what was returned leaves nothing outstanding, so it closes.
   const status = statusFor(returnedPaise, input.amountPaise);
+  const today = todayISO();
   const closing =
     status === 'CLOSED' && doc.status !== 'CLOSED'
-      ? { closedDate: todayISO(), closedAt: new Date(), closedBy: user.displayName, closedByUserId: user.id }
+      ? {
+          closedDate: today,
+          closedAt: new Date(),
+          closedBy: user.displayName,
+          closedByUserId: user.id,
+          finalAgeDays: Math.max(0, daysBetween(input.entryDate, today)),
+        }
       : {};
 
   const result = await db.collections.entries().findOneAndUpdate(
@@ -429,6 +512,7 @@ async function updateEntry(id, body, user) {
         entryDate: input.entryDate,
         whom: input.whom,
         whomLower: input.whom.toLowerCase(),
+        givenToUserId: given.givenToUserId,
         particulars: input.particulars,
         particularsLower: input.particulars.toLowerCase(),
         amountPaise: input.amountPaise,
@@ -471,7 +555,11 @@ function validateReturnInput(body, doc, today) {
     });
   }
   if (amountPaise > balancePaise) {
-    throw new HttpError(400, 'Returned amount cannot be greater than the remaining balance.', { field: 'amount' });
+    throw new HttpError(
+      400,
+      `Returned amount cannot be greater than the remaining balance of ${formatRupees(balancePaise)}.`,
+      { field: 'amount' }
+    );
   }
 
   const remark = cleanText(body.remark);
@@ -480,7 +568,10 @@ function validateReturnInput(body, doc, today) {
   return { returnDate, returnedBy, amountPaise, remark: remark || null };
 }
 
-/** Record money returned by the person. Closes the entry automatically when the balance reaches zero. */
+/**
+ * Record money returned by the person. When the balance reaches zero the entry closes by itself:
+ * the closed date is the date of that final return, and the final age is fixed at that moment.
+ */
 async function addReturn(id, body, user) {
   const doc = await requireActiveDoc(id);
   if (doc.status === 'CLOSED') {
@@ -490,11 +581,7 @@ async function addReturn(id, body, user) {
 
   const today = todayISO();
   const input = validateReturnInput(body, doc, today);
-  return applyReturn(doc, input, user, today, 'RETURN');
-}
 
-/** Shared by Add Return and Close (closing records the remaining balance as a final return). */
-async function applyReturn(doc, input, user, today, action) {
   const entry = {
     id: new db.ObjectId(),
     returnDate: input.returnDate,
@@ -510,19 +597,15 @@ async function applyReturn(doc, input, user, today, action) {
   const balancePaise = doc.amountPaise - returnedPaise;
   const status = statusFor(returnedPaise, doc.amountPaise);
 
-  const set = {
-    returns,
-    returnedPaise,
-    status,
-    updatedAt: new Date(),
-    updatedBy: user.displayName,
-  };
+  const set = { returns, returnedPaise, status, updatedAt: new Date(), updatedBy: user.displayName };
+  let finalAgeDays = null;
   if (status === 'CLOSED') {
-    set.closedDate = today;
+    finalAgeDays = Math.max(0, daysBetween(doc.entryDate, input.returnDate));
+    set.closedDate = input.returnDate;
     set.closedAt = new Date();
     set.closedBy = user.displayName;
     set.closedByUserId = user.id;
-    if (input.closingRemark !== undefined) set.closingRemark = input.closingRemark;
+    set.finalAgeDays = finalAgeDays;
   }
 
   const result = await db.collections.entries().findOneAndUpdate(
@@ -537,10 +620,9 @@ async function applyReturn(doc, input, user, today, action) {
     });
   }
 
-  const saved = mapEntry(updated, today);
   await audit.logAction({
     entryId: doc._id,
-    action,
+    action: 'RETURN',
     details: {
       srn: doc.srn,
       returnDate: input.returnDate,
@@ -550,42 +632,22 @@ async function applyReturn(doc, input, user, today, action) {
       returnedTotalPaise: returnedPaise,
       balancePaise,
       status,
-      ...(status === 'CLOSED' ? { closedDate: today, daysPending: saved.ageDays } : {}),
+      ...(status === 'CLOSED' ? { closedDate: input.returnDate, finalAgeDays } : {}),
     },
     user,
   });
-  return saved;
+  return mapEntry(updated, today);
 }
 
-/**
- * Close an entry. Any remaining balance is recorded as a final return, so the books always
- * satisfy: Original Amount = Returned Amount + Balance Amount.
- */
-async function closeEntry(id, body, user) {
+/** There is no manual close: an entry closes itself when its balance reaches zero. */
+async function closeEntry(id) {
   const doc = await requireActiveDoc(id);
   if (doc.status === 'CLOSED') throw new HttpError(409, `${doc.srn} is already closed.`);
-  checkVersion(doc, body.version);
-
-  const closingRemark = cleanText(body.closingRemark);
-  if (closingRemark.length > 500) {
-    throw new HttpError(400, 'Closing remark is too long (max 500 characters).', { field: 'closingRemark' });
-  }
-  const today = todayISO();
   const balancePaise = doc.amountPaise - (doc.returnedPaise || 0);
-  const returnedBy = cleanText(body.returnedBy) || doc.whom;
-
-  return applyReturn(
-    doc,
-    {
-      returnDate: today,
-      returnedBy,
-      amountPaise: balancePaise,
-      remark: closingRemark || 'Balance returned in full',
-      closingRemark: closingRemark || null,
-    },
-    user,
-    today,
-    'CLOSE'
+  throw new HttpError(
+    409,
+    `${doc.srn} still has a balance of ${formatRupees(balancePaise)}. It closes automatically once the full amount has been returned - use Add Return.`,
+    { code: 'BALANCE_OUTSTANDING' }
   );
 }
 
@@ -596,8 +658,7 @@ async function reopenEntry(id, body, user) {
   if (!reason) throw new HttpError(400, 'Enter the reason for reopening.', { field: 'reason' });
   if (reason.length > 500) throw new HttpError(400, 'Reason is too long (max 500 characters).', { field: 'reason' });
 
-  // Closing always records the remaining balance as a return, so reopening undoes that last
-  // return. The entry goes back to Partially Settled (or Open, if that was the only return).
+  // Reopening undoes the last return (the one that closed it) and puts that amount back in the balance.
   const returns = [...(doc.returns || [])];
   const removed = returns.pop() || null;
   const returnedPaise = returns.reduce((sum, r) => sum + r.amountPaise, 0);
@@ -614,7 +675,7 @@ async function reopenEntry(id, body, user) {
         closedAt: null,
         closedBy: null,
         closedByUserId: null,
-        closingRemark: null,
+        finalAgeDays: null,
         updatedAt: new Date(),
         updatedBy: user.displayName,
       },
@@ -634,7 +695,7 @@ async function reopenEntry(id, body, user) {
       removedReturn: removed
         ? { returnDate: removed.returnDate, returnedBy: removed.returnedBy, amountPaise: removed.amountPaise, remark: removed.remark }
         : null,
-      previous: { closedDate: doc.closedDate, closedBy: doc.closedBy, closingRemark: doc.closingRemark },
+      previous: { closedDate: doc.closedDate, closedBy: doc.closedBy },
     },
     user,
   });

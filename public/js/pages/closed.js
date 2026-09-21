@@ -9,8 +9,8 @@ export function render(main) {
         <div>
           <h1 class="page-title">Closed History</h1>
           <p class="page-sub">
-            Settled or adjusted entries. Closed records are never removed and remain here for audit. Most recently
-            closed first.
+            Entries whose full amount has been returned. Closed records are never removed. Click an SRN for the complete
+            return history.
           </p>
         </div>
       </div>
@@ -23,6 +23,7 @@ export function render(main) {
     defaultStatus: 'CLOSED',
     columns: () => CLOSED_COLUMNS,
     dateField: () => 'closed',
+    actions: true,
   });
 
   return { refresh: () => list.reload() };

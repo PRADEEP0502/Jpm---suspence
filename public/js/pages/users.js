@@ -1,5 +1,12 @@
 import { html, setHtml, $, api, toast, openModal, fmtDateTime, clearFieldErrors, showFieldError, withBusy } from '../lib.js';
-import { state, roleLabel } from '../state.js';
+import { state } from '../state.js';
+
+const ROLE_HELP = {
+  NORMAL: 'Sees only the money given to them. View only.',
+  ENTRY: 'Sees every entry. Can add, edit and record returns. No user management.',
+  ADMIN: 'Full access, including users, roles, permissions, reports and settings.',
+  MD: 'Full access, including users, roles, permissions, reports and settings.',
+};
 
 export function render(main) {
   let users = [];
@@ -10,7 +17,8 @@ export function render(main) {
         <div>
           <h1 class="page-title">Users</h1>
           <p class="page-sub">
-            Logins for staff who add, edit and close entries. Viewing the dashboard does not need a login.
+            Everyone signs in with an Employee ID. A person’s <strong>Name</strong> is what staff pick in
+            <em>Given To</em> — records given to that name appear in that person’s own view.
           </p>
         </div>
         <div class="page-actions">
@@ -20,11 +28,8 @@ export function render(main) {
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2 class="panel-title">Entry / Admin Logins</h2>
-            <div class="panel-sub">
-              <strong>Entry User</strong>: add, edit and close entries. <strong>Administrator</strong>: also reopen,
-              delete/restore entries and manage users.
-            </div>
+            <h2 class="panel-title">Logins</h2>
+            <div class="panel-sub" data-role="summary"></div>
           </div>
         </div>
         <div data-role="table"><div class="empty">Loading…</div></div>
@@ -32,14 +37,16 @@ export function render(main) {
   );
 
   function renderTable() {
+    const active = users.filter((u) => u.isActive).length;
+    $('[data-role="summary"]', main).textContent = `${users.length} logins · ${active} active`;
     setHtml(
       $('[data-role="table"]', main),
       html`<div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Login ID</th>
+              <th scope="col">Name (Given To)</th>
+              <th scope="col">Employee ID</th>
               <th scope="col">Role</th>
               <th scope="col">Status</th>
               <th scope="col">Created</th>
@@ -50,18 +57,16 @@ export function render(main) {
             ${users.map(
               (u) => html`<tr data-id="${u.id}" class="${u.isActive ? '' : 'is-inactive'}">
                 <td data-label="Name">
-                  <span class="whom">${u.displayName}</span>${u.id === state.user.id
-                    ? html` <span class="muted">(you)</span>`
-                    : ''}
+                  <span class="whom">${u.displayName}</span>${u.id === state.user.id ? html` <span class="muted">(you)</span>` : ''}
                 </td>
-                <td data-label="Login ID"><span class="mono">${u.username}</span></td>
-                <td data-label="Role">${roleLabel(u.role)}</td>
+                <td data-label="Employee ID"><span class="mono">${u.username}</span></td>
+                <td data-label="Role">${u.roleLabel}</td>
                 <td data-label="Status">
                   <div>
                     ${u.isActive
                       ? html`<span class="badge badge--closed">Active</span>`
-                      : html`<span class="badge badge--deleted">Inactive</span>`}
-                    ${u.mustChangePassword ? html`<div class="cell-sub">Must set new password at next login</div>` : ''}
+                      : html`<span class="badge badge--deleted">Disabled</span>`}
+                    ${u.mustChangePassword ? html`<div class="cell-sub">Must set a new password at next login</div>` : ''}
                   </div>
                 </td>
                 <td data-label="Created">${fmtDateTime(u.createdAt)}</td>
@@ -120,55 +125,64 @@ export function render(main) {
     };
     form.addEventListener('submit', submit);
     btn.addEventListener('click', submit);
+    return { form, modal: m };
   }
 
-  const roleSelect = (value) => html`<select id="u-role" name="role">
-    <option value="ENTRY" ${value !== 'ADMIN' ? html`selected` : ''}>Entry User — add, edit, close</option>
-    <option value="ADMIN" ${value === 'ADMIN' ? html`selected` : ''}>Administrator — full access</option>
-  </select>`;
+  const roleSelect = (current) => html`<select id="u-role" name="role">
+    ${state.roles.map((r) => html`<option value="${r.key}" ${r.key === current ? html`selected` : ''}>${r.label}</option>`)}
+  </select>
+  <div class="hint" data-role="role-help">${ROLE_HELP[current]}</div>`;
+
+  const wireRoleHelp = (form) => {
+    const help = $('[data-role="role-help"]', form);
+    form.role.addEventListener('change', () => {
+      help.textContent = ROLE_HELP[form.role.value];
+    });
+  };
 
   function addUser() {
-    formDialog({
+    const { form } = formDialog({
       title: 'Add User',
       saveLabel: 'Create User',
       bodyHtml: html`
         <div class="field">
-          <label for="u-name">Name</label>
-          <input id="u-name" name="displayName" type="text" maxlength="60" placeholder="Shown as Closed By" />
+          <label for="u-name">Name <span class="req">*</span></label>
+          <input id="u-name" name="displayName" type="text" maxlength="60" placeholder="e.g. Ashok" />
+          <div class="hint">Use the same name staff will pick in Given To. Records given to this name will show up for this person.</div>
         </div>
         <div class="field">
-          <label for="u-login">Login ID</label>
-          <input id="u-login" name="username" type="text" maxlength="30" placeholder="e.g. ravi" />
+          <label for="u-login">Employee ID <span class="req">*</span></label>
+          <input id="u-login" name="username" type="text" maxlength="30" placeholder="e.g. ashok" />
         </div>
         <div class="field">
           <label for="u-role">Role</label>
-          ${roleSelect('ENTRY')}
+          ${roleSelect('NORMAL')}
         </div>
         <div class="field">
-          <label for="u-pass">Temporary Password</label>
+          <label for="u-pass">Temporary Password <span class="req">*</span></label>
           <input id="u-pass" name="password" type="text" maxlength="128" />
-          <div class="hint">At least 6 characters. The user will set their own password at first login.</div>
+          <div class="hint">At least 6 characters. The person sets their own password at first login.</div>
         </div>`,
-      async onSubmit(form) {
-        if (!form.displayName.value.trim()) return showFieldError(form, 'displayName', 'Enter the person’s name.') || false;
-        if (!form.username.value.trim()) return showFieldError(form, 'username', 'Enter a login ID.') || false;
-        if (form.password.value.length < 6) {
-          return showFieldError(form, 'password', 'Password must be at least 6 characters.') || false;
-        }
+      async onSubmit(f) {
+        if (!f.displayName.value.trim()) return showFieldError(f, 'displayName', 'Enter the person’s name.') || false;
+        if (!f.username.value.trim()) return showFieldError(f, 'username', 'Enter an Employee ID.') || false;
+        if (f.password.value.length < 6) return showFieldError(f, 'password', 'Password must be at least 6 characters.') || false;
         const res = await api('POST', '/api/users', {
-          displayName: form.displayName.value,
-          username: form.username.value,
-          role: form.role.value,
-          password: form.password.value,
+          displayName: f.displayName.value,
+          username: f.username.value,
+          role: f.role.value,
+          password: f.password.value,
         });
-        return `User ${res.user.username} created.`;
+        const linked = res.user.linkedRecords;
+        return `${res.user.displayName} added${linked ? ` — ${linked} existing record${linked === 1 ? '' : 's'} linked to them` : ''}.`;
       },
     });
+    wireRoleHelp(form);
   }
 
   function editUser(u) {
     const self = u.id === state.user.id;
-    formDialog({
+    const { form } = formDialog({
       title: `Edit User — ${u.username}`,
       saveLabel: 'Save Changes',
       bodyHtml: html`
@@ -183,24 +197,22 @@ export function render(main) {
         <div class="field field--check">
           <label>
             <input type="checkbox" name="isActive" ${u.isActive ? html`checked` : ''} ${self ? html`disabled` : ''} />
-            Login is active
+            Login is enabled
           </label>
-          <div class="hint">Inactive users cannot log in. Their past entries and history are kept.</div>
-        </div>`,
-      async onSubmit(form) {
-        if (self) form.role.value = u.role;
+          <div class="hint">A disabled login is signed out at once and cannot sign in. Their records are kept.</div>
+        </div>
+        <p class="hint">A change of role takes effect immediately; the person is signed out and signs in again.</p>`,
+      async onSubmit(f) {
         await api('PUT', `/api/users/${u.id}`, {
-          displayName: form.displayName.value,
-          role: form.role.value,
-          isActive: self ? true : form.isActive.checked,
+          displayName: f.displayName.value,
+          role: self ? u.role : f.role.value,
+          isActive: self ? true : f.isActive.checked,
         });
-        return `User ${u.username} updated.`;
+        return `${u.username} updated.`;
       },
     });
-    if (self) {
-      const select = document.getElementById('u-role');
-      if (select) select.disabled = true;
-    }
+    wireRoleHelp(form);
+    if (self) form.role.disabled = true;
   }
 
   function resetPassword(u) {
@@ -208,19 +220,15 @@ export function render(main) {
       title: `Reset Password — ${u.username}`,
       saveLabel: 'Reset Password',
       bodyHtml: html`
-        <p class="notice">
-          ${u.displayName} will be logged out and asked to set a new password the next time they log in.
-        </p>
+        <p class="notice">${u.displayName} will be signed out and asked to set a new password at the next login.</p>
         <div class="field">
           <label for="u-pass">Temporary Password</label>
           <input id="u-pass" name="password" type="text" maxlength="128" />
-          <div class="hint">At least 6 characters. Share it with the user privately.</div>
+          <div class="hint">At least 6 characters. Share it with the person privately.</div>
         </div>`,
-      async onSubmit(form) {
-        if (form.password.value.length < 6) {
-          return showFieldError(form, 'password', 'Password must be at least 6 characters.') || false;
-        }
-        await api('POST', `/api/users/${u.id}/reset-password`, { password: form.password.value });
+      async onSubmit(f) {
+        if (f.password.value.length < 6) return showFieldError(f, 'password', 'Password must be at least 6 characters.') || false;
+        await api('POST', `/api/users/${u.id}/reset-password`, { password: f.password.value });
         return `Password reset for ${u.username}.`;
       },
     });
@@ -230,7 +238,7 @@ export function render(main) {
     if (ev.target.closest('[data-role="add"]')) return addUser();
     const act = ev.target.closest('[data-act]');
     if (!act) return;
-    const u = users.find((x) => String(x.id) === act.closest('tr').dataset.id);
+    const u = users.find((x) => x.id === act.closest('tr').dataset.id);
     if (!u) return;
     if (act.dataset.act === 'edit') editUser(u);
     if (act.dataset.act === 'reset') resetPassword(u);

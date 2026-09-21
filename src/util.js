@@ -101,6 +101,16 @@ function parseAmountToPaise(value) {
   return Number.isSafeInteger(paise) ? paise : null;
 }
 
+/** Rupees for messages: 200 -> ₹200, 1250.5 -> ₹1,250.50 (Indian grouping). */
+function formatRupees(paise) {
+  const rupees = (paise || 0) / 100;
+  const hasFraction = (paise || 0) % 100 !== 0;
+  return (
+    '₹' +
+    rupees.toLocaleString('en-IN', { minimumFractionDigits: hasFraction ? 2 : 0, maximumFractionDigits: 2 })
+  );
+}
+
 /** Make user input safe to use inside a regular expression (search box). */
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,4 +132,5 @@ module.exports = {
   cleanText,
   parseAmountToPaise,
   escapeRegex,
+  formatRupees,
 };

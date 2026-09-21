@@ -685,7 +685,7 @@ textarea {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  white-space: nowrap;
+  white-space: normal;
   border-bottom: 1px solid var(--border);
 }
 .data-table tbody tr:last-child td {
@@ -2102,6 +2102,60 @@ textarea {
   }
   .brand-sub {
     font-size: 12px;
+  }
+}
+
+/* ------------------------------------------------------------------ Roles, permissions, reports, settings */
+
+.card--partial {
+  --card-accent: #d9a400;
+}
+.card--partial .card-value {
+  color: #7a5200;
+}
+.cards--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.hint--ok {
+  color: var(--closed-fg);
+  font-weight: 500;
+}
+
+.perm-table th[scope='row'] {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.perm-table .perm {
+  white-space: normal;
+}
+.perm--yes {
+  color: var(--closed-fg);
+  font-weight: 600;
+}
+.perm--no {
+  color: var(--muted);
+}
+
+.report-card .panel-head {
+  border-bottom: 0;
+  align-items: center;
+}
+.settings-grid {
+  padding: 16px 18px;
+  margin: 0;
+}
+.profile-card .detail-grid {
+  padding: 16px 18px 0;
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .cards:not(.cards--compact):not(.cards--four) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cards--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

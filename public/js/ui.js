@@ -35,16 +35,47 @@ function card(label, value, meta, modifier = '') {
   </div>`;
 }
 
+const entriesWord = (n) => plural(n, 'entry', 'entries');
+
+/**
+ * The six figures management reads first. Everything comes from the database.
+ *   Total Suspense Amount        everything ever given (original amounts)
+ *   Open Amount                  balance of entries with nothing returned yet
+ *   Partially Settled Amount     balance still pending on part-returned entries
+ *   Closed Amount                what was given in entries that are now fully returned
+ *   Open Entries / Partially Settled Entries   how many of each
+ */
 export function summaryCards(c) {
-  const entries = (n) => plural(n, 'entry', 'entries');
   return html`<div class="cards">
-    ${card('Balance Amount', fmtMoney(c.balanceAmountPaise), `Still to come back · ${entries(c.pendingCount)}`, 'open')}
-    ${card('Returned Amount', fmtMoney(c.returnedAmountPaise), `Out of ${fmtMoney(c.originalAmountPaise)} given`, 'closed')}
     ${card(
-      'Pending Entries',
-      c.pendingCount,
-      c.pendingCount ? `Longest waiting: ${fmtDays(c.oldestPendingDays)}` : 'Nothing pending'
+      'Total Suspense Amount',
+      fmtMoney(c.totalOriginalPaise),
+      `Returned ${fmtMoney(c.totalReturnedPaise)} · Balance ${fmtMoney(c.totalBalancePaise)}`
     )}
+    ${card('Open Amount', fmtMoney(c.openAmountPaise), `Nothing returned yet · ${entriesWord(c.openCount)}`, 'open')}
+    ${card(
+      'Partially Settled Amount',
+      fmtMoney(c.partialAmountPaise),
+      `Balance left of ${fmtMoney(c.partialOriginalPaise)} given`,
+      'partial'
+    )}
+    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `Fully returned · ${entriesWord(c.closedCount)}`, 'closed')}
+    ${card(
+      'Open Entries',
+      c.openCount,
+      c.pendingCount ? `Longest waiting (all pending): ${fmtDays(c.oldestPendingDays)}` : 'Nothing pending'
+    )}
+    ${card('Partially Settled Entries', c.partialCount, c.partialCount ? 'Some money returned, balance pending' : 'None')}
+  </div>`;
+}
+
+/** A Normal User's own figures. */
+export function myCards(c) {
+  return html`<div class="cards cards--four">
+    ${card('Balance Pending', fmtMoney(c.totalBalancePaise), `Still to be returned · ${entriesWord(c.pendingCount)}`, 'open')}
+    ${card('Returned So Far', fmtMoney(c.totalReturnedPaise), `Of ${fmtMoney(c.totalOriginalPaise)} originally given`, 'closed')}
+    ${card('Open Entries', c.openCount, c.openCount ? 'Nothing returned yet' : 'None')}
+    ${card('Partially Settled', c.partialCount, c.partialCount ? 'Part returned, balance pending' : 'None')}
   </div>`;
 }
 
@@ -121,7 +152,7 @@ export function agingTiles(aging) {
         <span class="aging-amount">${fmtMoney(a.amountPaise)}</span>
         <span class="aging-count">${plural(a.count, 'entry', 'entries')}</span>
         <span class="meter" aria-hidden="true"><span style="width:${a.amountPaise ? Math.max(exact, 1) : 0}%"></span></span>
-        <span class="aging-share">${pctLabel}% of open amount</span>
+        <span class="aging-share">${pctLabel}% of pending balance</span>
       </button>`;
     })}
   </div>`;

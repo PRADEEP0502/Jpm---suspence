@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const config = require('./config');
 const { HttpError } = require('./util');
+const permissions = require('./permissions');
 
 const COOKIE_NAME = 'jpm_sid';
 const SESSION_HOURS = config.SESSION_HOURS;
@@ -79,11 +80,16 @@ function setSessionCookie(res, token, maxAgeSeconds) {
 }
 
 function toPublicUser(doc) {
+  const role = permissions.isRole(doc.role) ? doc.role : 'NORMAL';
   return {
     id: String(doc._id),
     username: doc.username,
     displayName: doc.displayName,
-    role: doc.role,
+    role,
+    roleLabel: permissions.ROLE_LABELS[role],
+    // Same list the server enforces; the browser only uses it to decide what to show.
+    permissions: permissions.permissionsFor(role),
+    home: permissions.HOME_FOR_ROLE[role],
     mustChangePassword: !!doc.mustChangePassword,
   };
 }
@@ -201,12 +207,18 @@ function requireLogin(req, _res, next) {
   next();
 }
 
-function requireAdmin(req, res, next) {
-  requireLogin(req, res, (err) => {
-    if (err) return next(err);
-    if (req.user.role !== 'ADMIN') return next(new HttpError(403, 'Only an administrator can do this.'));
-    next();
-  });
+/**
+ * Server-side permission check. Every route that reads or changes protected data uses this,
+ * so a user who calls the API directly gets exactly the same answer as one using the screens.
+ */
+function requirePermission(...needed) {
+  return (req, res, next) => {
+    requireLogin(req, res, (err) => {
+      if (err) return next(err);
+      if (needed.some((p) => permissions.can(req.user, p))) return next();
+      next(new HttpError(403, 'You do not have permission to do this.', { code: 'FORBIDDEN' }));
+    });
+  };
 }
 
 /**
@@ -230,7 +242,7 @@ module.exports = {
   destroyAllSessionsForUser,
   loadUser,
   requireLogin,
-  requireAdmin,
+  requirePermission,
   requireJsonForWrites,
   toPublicUser,
 };

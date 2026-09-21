@@ -1,9 +1,9 @@
 // Reusable entries table with search, status switch, filters, sorting and row actions.
 
 import { html, setHtml, $, $$, api, toQuery, debounce, fmtMoney, fmtDate, fmtDateTime, plural } from './lib.js';
-import { state, canManage, isAdmin } from './state.js';
+import { state, can } from './state.js';
 import { statusBadge, ageBadge } from './ui.js';
-import { showEntryDetail, showEntryForm, showCloseDialog, showReturnDialog, restoreEntry } from './dialogs.js';
+import { showEntryDetail, showEntryForm, showReturnDialog, restoreEntry } from './dialogs.js';
 
 const COLUMNS = {
   srn: {
@@ -49,7 +49,20 @@ const COLUMNS = {
     cls: 'nowrap',
   },
   closedBy: { label: 'Closed By', sort: (e) => (e.closedBy || '').toLowerCase(), cell: (e) => e.closedBy || '—' },
-  closingRemark: { label: 'Closing Remark', cell: (e) => e.closingRemark || html`<span class="muted">—</span>` },
+  // Closed History wording
+  returnedTotal: {
+    label: 'Total Returned',
+    sort: (e) => e.returnedPaise,
+    cell: (e) => html`<span class="returned">${fmtMoney(e.returnedPaise)}</span>`,
+    cls: 'num',
+  },
+  balanceShort: {
+    label: 'Balance',
+    sort: (e) => e.balancePaise,
+    cell: (e) => html`<span class="muted">${fmtMoney(e.balancePaise)}</span>`,
+    cls: 'num',
+  },
+  finalAge: { label: 'Final Age', sort: (e) => e.ageDays, cell: (e) => ageBadge(e) },
   deleted: {
     label: 'Deleted',
     sort: (e) => e.deletedAt || '',
@@ -105,11 +118,7 @@ function entryCard(e, keys) {
       ${ageBadge(e)}
     </div>
     ${closed
-      ? html`<div class="ec-note">
-          Closed ${fmtDate(e.closedDate)}${e.closedBy ? ` by ${e.closedBy}` : ''}${e.closingRemark
-            ? ` · ${e.closingRemark}`
-            : ''}
-        </div>`
+      ? html`<div class="ec-note">Closed ${fmtDate(e.closedDate)}${e.closedBy ? ` by ${e.closedBy}` : ''}</div>`
       : ''}
     ${e.isDeleted
       ? html`<div class="ec-note">Deleted ${fmtDateTime(e.deletedAt)} by ${e.deletedBy}: ${e.deleteReason}</div>`
@@ -118,16 +127,17 @@ function entryCard(e, keys) {
   </article>`;
 }
 
+/** Row buttons: only the ones this user is allowed to use. Every entry can be viewed. */
 function rowActions(e) {
   if (e.isDeleted) {
-    return isAdmin() ? html`<button type="button" class="btn btn--sm" data-row-act="restore">Restore</button>` : '';
+    return can('entries:delete') ? html`<button type="button" class="btn btn--sm" data-row-act="restore">Restore</button>` : '';
   }
-  if (e.status !== 'CLOSED') {
-    return html`<button type="button" class="btn btn--sm" data-row-act="edit">Edit</button>
-      <button type="button" class="btn btn--sm btn--primary-ghost" data-row-act="return">Return</button>
-      <button type="button" class="btn btn--sm" data-row-act="close">Close</button>`;
-  }
-  return html`<button type="button" class="btn btn--sm" data-row-act="view">View</button>`;
+  const pending = e.status !== 'CLOSED';
+  return html`<button type="button" class="btn btn--sm" data-row-act="view">View</button>
+    ${pending && can('entries:edit') ? html`<button type="button" class="btn btn--sm" data-row-act="edit">Edit</button>` : ''}
+    ${pending && can('entries:return')
+      ? html`<button type="button" class="btn btn--sm btn--primary-ghost" data-row-act="return">Add Return</button>`
+      : ''}`;
 }
 
 const STATUS_TITLES = {
@@ -180,7 +190,8 @@ export function mountEntryList(container, config) {
   let loaded = false;
   let requestSeq = 0;
 
-  const showActions = () => cfg.actions && canManage();
+  // The Action column appears wherever staff work with entries (View, plus Edit / Add Return if allowed).
+  const showActions = () => cfg.actions && can('entries:viewAll');
   const columnKeys = () => [...cfg.columns(st.status), ...(showActions() ? ['actions'] : [])];
   const defaultSort = () => {
     if (cfg.defaultSort) return cfg.defaultSort(st.status);
@@ -235,7 +246,7 @@ export function mountEntryList(container, config) {
       </div>
 
       <div class="filters" data-role="filters" hidden>
-        ${cfg.fixed.whom
+        ${cfg.fixed.whom || cfg.noWhomFilter
           ? ''
           : html`<div class="field">
               <label for="${cfg.id}-whom">Given To</label>
@@ -312,7 +323,7 @@ export function mountEntryList(container, config) {
     const query = {
       status: st.status,
       q: st.q,
-      whom: cfg.fixed.whom || st.whom,
+      whom: cfg.noWhomFilter ? '' : cfg.fixed.whom || st.whom,
       age: st.age,
       dateFrom: st.dateFrom,
       dateTo: st.dateTo,
@@ -323,13 +334,13 @@ export function mountEntryList(container, config) {
     try {
       const [data, lookups] = await Promise.all([
         api('GET', `/api/entries?${toQuery(query)}`),
-        api('GET', '/api/lookups'),
+        cfg.noWhomFilter ? Promise.resolve({ persons: [] }) : api('GET', '/api/lookups'),
       ]);
       if (seq !== requestSeq) return; // a newer request is on its way
       rows = data.entries;
       totals = data.totals;
       loaded = true;
-      fillSelect($('[data-f="whom"]', container), lookups.persons, 'Everyone');
+      if (!cfg.noWhomFilter) fillSelect($('[data-f="whom"]', container), lookups.persons, 'Everyone');
       renderTable();
       cfg.onLoaded(data);
     } catch (err) {
@@ -538,7 +549,6 @@ export function mountEntryList(container, config) {
       const actions = {
         edit: () => showEntryForm(entry),
         return: () => showReturnDialog(entry),
-        close: () => showCloseDialog(entry),
         view: () => showEntryDetail(entry),
         restore: () => restoreEntry(entry),
       };

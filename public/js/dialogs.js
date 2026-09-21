@@ -17,7 +17,7 @@ import {
   showFieldError,
   withBusy,
 } from './lib.js';
-import { state, canManage, isAdmin, refreshView } from './state.js';
+import { state, can, refreshView } from './state.js';
 import { statusBadge, ageBadge } from './ui.js';
 
 // ---------------------------------------------------------------------------
@@ -141,8 +141,7 @@ export async function showEntryDetail(entryOrId) {
         ${detailItem('Balance Amount', html`<strong>${fmtMoney(e.balancePaise)}</strong>`)}
         ${detailItem('Status', statusBadge(e))}
         ${e.status === 'CLOSED'
-          ? html`${detailItem('Closed Date', fmtDate(e.closedDate))} ${detailItem('Closed By', e.closedBy)}
-            ${detailItem('Closing Remark', e.closingRemark)}`
+          ? html`${detailItem('Closed Date', fmtDate(e.closedDate))} ${detailItem('Closed By', e.closedBy)}`
           : ''}
         ${e.isDeleted
           ? html`${detailItem('Deleted On', fmtDateTime(e.deletedAt))} ${detailItem('Deleted By', e.deletedBy)}
@@ -186,12 +185,14 @@ export async function showEntryDetail(entryOrId) {
           </div>`
         : html`<div class="empty">Nothing returned yet. The full ${fmtMoney(e.amountPaise)} is still pending.</div>`}
 
-      <h3 class="section-label">Record Information</h3>
-      <dl class="detail-grid detail-grid--audit">
-        ${detailItem('Created Date', fmtDateTime(e.createdAt))} ${detailItem('Created By', e.createdBy)}
-        ${detailItem('Updated Date', e.updatedAt ? fmtDateTime(e.updatedAt) : 'Not edited')}
-        ${detailItem('Updated By', e.updatedBy)}
-      </dl>
+      ${can('entries:viewAll')
+        ? html`<h3 class="section-label">Record Information</h3>
+            <dl class="detail-grid detail-grid--audit">
+              ${detailItem('Created Date', fmtDateTime(e.createdAt))} ${detailItem('Created By', e.createdBy)}
+              ${detailItem('Updated Date', e.updatedAt ? fmtDateTime(e.updatedAt) : 'Not edited')}
+              ${detailItem('Updated By', e.updatedBy)}
+            </dl>`
+        : ''}
 
       ${history && history.length
         ? html`<h3 class="section-label">Change History</h3>
@@ -209,24 +210,25 @@ export async function showEntryDetail(entryOrId) {
     `
   );
 
-  const manage = canManage() && !e.isDeleted;
+  // Buttons follow the signed-in user's permissions (the server checks the same permissions again).
+  const live = !e.isDeleted;
+  const pending = e.status !== 'CLOSED';
   setHtml(
     m.footer,
     html`
       <div class="footer-left">
-        ${isAdmin() && !e.isDeleted
+        ${can('entries:delete') && live
           ? html`<button type="button" class="btn btn--danger-ghost" data-act="delete">Delete</button>`
           : ''}
-        ${isAdmin() && e.isDeleted ? html`<button type="button" class="btn" data-act="restore">Restore</button>` : ''}
+        ${can('entries:delete') && e.isDeleted ? html`<button type="button" class="btn" data-act="restore">Restore</button>` : ''}
       </div>
       <button type="button" class="btn" data-close>Done</button>
-      ${manage && e.status === 'CLOSED' && isAdmin()
+      ${can('entries:reopen') && live && !pending
         ? html`<button type="button" class="btn" data-act="reopen">Reopen</button>`
         : ''}
-      ${manage && e.status !== 'CLOSED'
-        ? html`<button type="button" class="btn" data-act="edit">Edit</button>
-            <button type="button" class="btn" data-act="close">Close Entry</button>
-            <button type="button" class="btn btn--primary" data-act="return">+ Add Return</button>`
+      ${can('entries:edit') && live && pending ? html`<button type="button" class="btn" data-act="edit">Edit</button>` : ''}
+      ${can('entries:return') && live && pending
+        ? html`<button type="button" class="btn btn--primary" data-act="return">+ Add Return</button>`
         : ''}
     `
   );
@@ -238,7 +240,6 @@ export async function showEntryDetail(entryOrId) {
     const actions = {
       edit: () => showEntryForm(e),
       return: () => showReturnDialog(e),
-      close: () => showCloseDialog(e),
       reopen: () => showReopenDialog(e),
       delete: () => showDeleteDialog(e),
       restore: () => restoreEntry(e),
@@ -303,7 +304,7 @@ export async function showEntryForm(entry = null) {
           value="${isEdit ? entry.whom : ''}"
         />
         <datalist id="dl-persons">${lookups.persons.map((p) => html`<option value="${p}"></option>`)}</datalist>
-        <div class="hint">Start typing to pick an existing name.</div>
+        <div class="hint" data-role="whom-hint">Start typing to pick a name.</div>
       </div>
 
       <div class="field">
@@ -373,6 +374,22 @@ export async function showEntryForm(entry = null) {
 
   const form = $('form', m.body);
   const saveBtn = $('[data-save]', m.footer);
+
+  // Tell the user when the name they typed belongs to someone with a login: that person will see the record.
+  const whomHint = $('[data-role="whom-hint"]', form);
+  const employees = new Map((lookups.employees || []).map((p) => [p.name.toLowerCase(), p]));
+  const showWhomHint = () => {
+    const typed = form.whom.value.trim().toLowerCase();
+    const person = employees.get(typed);
+    whomHint.classList.toggle('hint--ok', !!person);
+    whomHint.textContent = person
+      ? `${person.name} has a login (Employee ID ${person.employeeId}) and will be able to see this record.`
+      : typed
+        ? 'No login with this name. Only staff will see this record.'
+        : 'Start typing to pick a name.';
+  };
+  form.whom.addEventListener('input', showWhomHint);
+  showWhomHint();
 
   form.addEventListener('click', (ev) => {
     const pick = ev.target.closest('[data-pick]');
@@ -535,7 +552,11 @@ export function showReturnDialog(e) {
       return showFieldError(form, 'amount', 'Enter a valid returned amount greater than zero.');
     }
     if (paise > e.balancePaise) {
-      return showFieldError(form, 'amount', 'Returned amount cannot be greater than the remaining balance.');
+      return showFieldError(
+        form,
+        'amount',
+        `Returned amount cannot be greater than the remaining balance of ${fmtMoney(e.balancePaise)}.`
+      );
     }
 
     await withBusy(btn, 'Saving…', async () => {
@@ -548,68 +569,6 @@ export function showReturnDialog(e) {
             ? `${saved.srn}: ${fmtMoney(paise)} returned. Balance is now zero, so it is closed.`
             : `${saved.srn}: ${fmtMoney(paise)} returned. Balance ${fmtMoney(saved.balancePaise)}.`
         );
-        refreshView();
-      } catch (err) {
-        showFieldError(form, err.field, err.message);
-        if (err.status === 409) refreshView();
-      }
-    });
-  };
-  form.addEventListener('submit', submit);
-  btn.addEventListener('click', submit);
-}
-
-export function showCloseDialog(e) {
-  const m = openModal({ title: 'Close Suspense Entry' });
-  setHtml(
-    m.body,
-    html`<form class="form" novalidate>
-      ${entrySummaryBox(e)}
-      <p class="confirm-question">Are you sure you want to close this suspense entry?</p>
-      ${e.balancePaise > 0
-        ? html`<p class="notice">
-            A balance of <strong>${fmtMoney(e.balancePaise)}</strong> is still outstanding. Closing records that amount
-            as returned by <strong>${e.whom}</strong> today, so the balance becomes zero. To record a smaller amount,
-            use <strong>+ Add Return</strong> instead.
-          </p>`
-        : ''}
-      <div class="field">
-        <label for="c-remark">Closing Remark <span class="optional">(optional)</span></label>
-        <input
-          id="c-remark"
-          name="closingRemark"
-          type="text"
-          maxlength="500"
-          placeholder="e.g. Balance returned in cash, adjusted in salary"
-        />
-      </div>
-      <p class="hint">
-        Closed date will be saved as <strong>${fmtDate(state.today)}</strong> and closed by
-        <strong>${state.user.displayName}</strong>. The entry stays in Closed History.
-      </p>
-      <div class="form-error" role="alert" hidden></div>
-      <button type="submit" hidden></button>
-    </form>`
-  );
-  setHtml(
-    m.footer,
-    html`<button type="button" class="btn" data-close>Cancel</button>
-      <button type="button" class="btn btn--primary" data-confirm>Yes, Close Entry</button>`
-  );
-
-  const form = $('form', m.body);
-  const btn = $('[data-confirm]', m.footer);
-  const submit = async (ev) => {
-    if (ev) ev.preventDefault();
-    clearFieldErrors(form);
-    await withBusy(btn, 'Closing…', async () => {
-      try {
-        const res = await api('POST', `/api/entries/${e.id}/close`, {
-          closingRemark: form.closingRemark.value.trim(),
-          version: e.version,
-        });
-        m.close();
-        toast(`${res.entry.srn} closed. Moved to Closed History.`);
         refreshView();
       } catch (err) {
         showFieldError(form, err.field, err.message);

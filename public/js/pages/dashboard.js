@@ -3,18 +3,21 @@ import { setToday } from '../state.js';
 import { summaryCards, groupTable, agingTiles } from '../ui.js';
 import { mountEntryList } from '../entry-list.js';
 
+// Column sets shared by the other pages.
 export const PENDING_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
-// A closed entry has been returned in full, so Returned = Original and Balance = 0; no need for those columns.
+export const ALL_COLUMNS = PENDING_COLUMNS;
+// A closed entry has been returned in full: Balance is zero and the age is the final one.
 export const CLOSED_COLUMNS = [
   'srn',
   'originalDate',
   'whom',
   'particulars',
   'amount',
-  'daysPending',
+  'returnedTotal',
+  'balanceShort',
+  'finalAge',
   'closedDate',
   'closedBy',
-  'closingRemark',
   'status',
 ];
 
@@ -34,7 +37,7 @@ export function render(main) {
         <div class="panel-head">
           <div>
             <h2 class="panel-title">Aging Summary</h2>
-            <div class="panel-sub">Outstanding balance grouped by days pending. Click a group to list those entries.</div>
+            <div class="panel-sub">Balance still pending, grouped by days pending. Click a group to list those entries.</div>
           </div>
         </div>
         <div class="panel-body" data-role="aging"></div>
@@ -65,23 +68,21 @@ export function render(main) {
       </div>`
   );
 
-  // Only entries with money still to come back; fully returned ones live in Closed History.
+  // Money still to come back (Open and Partially Settled). Fully returned entries are in Closed History.
   const listEl = $('[data-role="list"]', main);
   const list = mountEntryList(listEl, {
     id: 'dashboard',
     title: () => 'Pending Suspense',
     defaultStatus: 'PENDING',
     columns: () => PENDING_COLUMNS,
+    actions: true,
   });
-
-  const showInTable = (patch) => {
-    list.setFilters(patch);
-    listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
 
   $('[data-role="aging"]', main).addEventListener('click', (ev) => {
     const tile = ev.target.closest('[data-age]');
-    if (tile) showInTable({ age: tile.dataset.age });
+    if (!tile) return;
+    list.setFilters({ age: tile.dataset.age });
+    listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   // A person's full picture (open and closed) is on the Person Summary page.
