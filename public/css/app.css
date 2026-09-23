@@ -319,8 +319,10 @@ textarea {
 }
 .page-title {
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.25;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 .page-sub {
   margin: 4px 0 0;
@@ -398,8 +400,10 @@ textarea {
   flex-wrap: wrap;
 }
 .panel-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 .panel-sub {
   color: var(--muted);
@@ -1244,8 +1248,10 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 .modal-title {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 .modal-body {
   padding: 18px 20px 6px;
