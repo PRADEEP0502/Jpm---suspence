@@ -27,8 +27,12 @@ export function ageBadge(entry, { withLevel = false } = {}) {
   >`;
 }
 
-function card(label, value, meta, modifier = '') {
-  return html`<div class="card ${modifier ? `card--${modifier}` : ''}">
+/** kpi, when given, turns the card into a shortcut to the entries behind that figure. */
+function card(label, value, meta, modifier = '', kpi = null) {
+  return html`<div
+    class="card ${modifier ? `card--${modifier}` : ''} ${kpi ? 'card--clickable' : ''}"
+    ${kpi ? html`data-kpi="${kpi}" role="button" tabindex="0" aria-label="${label}: ${value}. Show these entries."` : ''}
+  >
     <div class="card-label">${label}</div>
     <div class="card-value">${value}</div>
     <div class="card-meta">${meta}</div>
@@ -46,36 +50,71 @@ const entriesWord = (n) => plural(n, 'entry', 'entries');
  *   Open Entries / Partially Settled Entries   how many of each
  */
 export function summaryCards(c) {
-  return html`<div class="cards">
+  return html`<div class="cards" data-role="kpi-cards">
     ${card(
       'Total Suspense Amount',
       fmtMoney(c.totalOriginalPaise),
-      `Returned ${fmtMoney(c.totalReturnedPaise)} · Balance ${fmtMoney(c.totalBalancePaise)}`
+      `Returned ${fmtMoney(c.totalReturnedPaise)} · Balance ${fmtMoney(c.totalBalancePaise)}`,
+      '',
+      'ALL'
     )}
-    ${card('Open Amount', fmtMoney(c.openAmountPaise), `Nothing returned yet · ${entriesWord(c.openCount)}`, 'open')}
+    ${card(
+      'Open Amount',
+      fmtMoney(c.openAmountPaise),
+      `Nothing returned yet · ${entriesWord(c.openCount)}`,
+      'open',
+      'OPEN'
+    )}
     ${card(
       'Partially Settled Amount',
       fmtMoney(c.partialAmountPaise),
       `Balance left of ${fmtMoney(c.partialOriginalPaise)} given`,
-      'partial'
+      'partial',
+      'PARTIAL'
     )}
-    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `Fully returned · ${entriesWord(c.closedCount)}`, 'closed')}
+    ${card(
+      'Closed Amount',
+      fmtMoney(c.closedAmountPaise),
+      `Fully returned · ${entriesWord(c.closedCount)}`,
+      'closed',
+      'CLOSED'
+    )}
     ${card(
       'Open Entries',
       c.openCount,
-      c.pendingCount ? `Longest waiting (all pending): ${fmtDays(c.oldestPendingDays)}` : 'Nothing pending'
+      c.pendingCount ? `Longest waiting (all pending): ${fmtDays(c.oldestPendingDays)}` : 'Nothing pending',
+      '',
+      'OPEN'
     )}
-    ${card('Partially Settled Entries', c.partialCount, c.partialCount ? 'Some money returned, balance pending' : 'None')}
+    ${card(
+      'Partially Settled Entries',
+      c.partialCount,
+      c.partialCount ? 'Some money returned, balance pending' : 'None',
+      '',
+      'PARTIAL'
+    )}
   </div>`;
 }
 
-/** A Normal User's own figures. */
+/** A Normal User's own figures. Clicking a card filters their own entry list below (same page, no navigation). */
 export function myCards(c) {
-  return html`<div class="cards cards--four">
-    ${card('Balance Pending', fmtMoney(c.totalBalancePaise), `Still to be returned · ${entriesWord(c.pendingCount)}`, 'open')}
-    ${card('Returned So Far', fmtMoney(c.totalReturnedPaise), `Of ${fmtMoney(c.totalOriginalPaise)} originally given`, 'closed')}
-    ${card('Open Entries', c.openCount, c.openCount ? 'Nothing returned yet' : 'None')}
-    ${card('Partially Settled', c.partialCount, c.partialCount ? 'Part returned, balance pending' : 'None')}
+  return html`<div class="cards cards--four" data-role="kpi-cards">
+    ${card(
+      'Balance Pending',
+      fmtMoney(c.totalBalancePaise),
+      `Still to be returned · ${entriesWord(c.pendingCount)}`,
+      'open',
+      'PENDING'
+    )}
+    ${card(
+      'Returned So Far',
+      fmtMoney(c.totalReturnedPaise),
+      `Of ${fmtMoney(c.totalOriginalPaise)} originally given`,
+      'closed',
+      'ALL'
+    )}
+    ${card('Open Entries', c.openCount, c.openCount ? 'Nothing returned yet' : 'None', '', 'OPEN')}
+    ${card('Partially Settled', c.partialCount, c.partialCount ? 'Part returned, balance pending' : 'None', '', 'PARTIAL')}
   </div>`;
 }
 

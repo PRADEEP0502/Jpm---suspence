@@ -85,6 +85,23 @@ export function render(main) {
     listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
+  // Every KPI card is a shortcut to the entries behind its figure.
+  const cardsEl = $('[data-role="cards"]', main);
+  const openKpi = (kpi) => {
+    location.hash = kpi === 'CLOSED' ? '#/closed' : `#/all/${kpi}`;
+  };
+  cardsEl.addEventListener('click', (ev) => {
+    const c = ev.target.closest('[data-kpi]');
+    if (c) openKpi(c.dataset.kpi);
+  });
+  cardsEl.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const c = ev.target.closest('[data-kpi]');
+    if (!c) return;
+    ev.preventDefault();
+    openKpi(c.dataset.kpi);
+  });
+
   // A person's full picture (open and closed) is on the Person Summary page.
   $('[data-role="persons"]', main).addEventListener('click', (ev) => {
     const row = ev.target.closest('[data-whom]');

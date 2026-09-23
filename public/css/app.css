@@ -327,6 +327,18 @@ textarea {
   display: flex;
   gap: 8px;
 }
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.back-link:hover {
+  color: var(--primary);
+}
 
 .steps {
   list-style: none;
@@ -428,6 +440,27 @@ textarea {
 }
 .card--closed {
   --card-accent: #3f8f5a;
+}
+.card--clickable {
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+.card--clickable:hover,
+.card--clickable:focus-visible {
+  border-color: var(--card-accent, var(--border-strong));
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
+}
+.card--clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.card--clickable:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow);
 }
 .card-label {
   font-size: 12px;

@@ -39,6 +39,25 @@ export function render(main) {
     actions: false,
   });
 
+  // Each card filters the list below to exactly the entries behind its figure.
+  const cardsEl = $('[data-role="cards"]', main);
+  const listEl = $('[data-role="list"]', main);
+  const applyKpi = (kpi) => {
+    list.setFilters({ status: kpi });
+    listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  cardsEl.addEventListener('click', (ev) => {
+    const c = ev.target.closest('[data-kpi]');
+    if (c) applyKpi(c.dataset.kpi);
+  });
+  cardsEl.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const c = ev.target.closest('[data-kpi]');
+    if (!c) return;
+    ev.preventDefault();
+    applyKpi(c.dataset.kpi);
+  });
+
   async function loadCards() {
     try {
       const data = await api('GET', '/api/dashboard');

@@ -7,6 +7,7 @@ export function render(main) {
     main,
     html`<div class="page-head">
         <div>
+          <a class="back-link" href="#/dashboard">← Back to Dashboard</a>
           <h1 class="page-title">Closed History</h1>
           <p class="page-sub">
             Entries whose full amount has been returned. Closed records are never removed. Click an SRN for the complete
