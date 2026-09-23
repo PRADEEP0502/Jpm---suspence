@@ -69,8 +69,10 @@ function parseHash() {
 /** "Period: 12/09/2026 - 23/09/2026", from this user's earliest visible entry to today. */
 function periodLabel() {
   if (!state.user) return fmtDate(state.today);
-  if (!state.earliestEntryDate) return 'No entries yet';
-  return `Period: ${fmtDate(state.earliestEntryDate)} – ${fmtDate(state.today)}`;
+  if (!state.earliestEntryDate) return html`<span class="period-tag">No entries yet</span>`;
+  return html`<span class="period-tag">Period</span> <span class="period-range"
+    >${fmtDate(state.earliestEntryDate)} <span class="period-sep">–</span> ${fmtDate(state.today)}</span
+  >`;
 }
 
 function renderHeader() {
