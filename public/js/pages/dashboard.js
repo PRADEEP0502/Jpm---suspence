@@ -1,4 +1,4 @@
-import { html, setHtml, $, api, fmtDate } from '../lib.js';
+import { html, setHtml, $, api } from '../lib.js';
 import { setToday } from '../state.js';
 import { summaryCards, groupTable, agingTiles } from '../ui.js';
 import { mountEntryList } from '../entry-list.js';
@@ -111,10 +111,7 @@ export function render(main) {
   async function loadSummary() {
     try {
       const data = await api('GET', '/api/dashboard');
-      // Keep the "As of" date in the header current, even if the page is left open overnight.
       setToday(data.today);
-      const asOf = document.getElementById('asOf');
-      if (asOf) asOf.textContent = fmtDate(data.today);
       setHtml($('[data-role="cards"]', main), summaryCards(data.cards));
       setHtml(
         $('[data-role="persons"]', main),

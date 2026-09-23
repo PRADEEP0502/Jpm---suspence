@@ -66,8 +66,15 @@ function parseHash() {
 // Header & navigation
 // ---------------------------------------------------------------------------
 
+/** "Period: 12/09/2026 - 23/09/2026", from this user's earliest visible entry to today. */
+function periodLabel() {
+  if (!state.user) return fmtDate(state.today);
+  if (!state.earliestEntryDate) return 'No entries yet';
+  return `Period: ${fmtDate(state.earliestEntryDate)} – ${fmtDate(state.today)}`;
+}
+
 function renderHeader() {
-  setHtml($('#asOf'), fmtDate(state.today));
+  setHtml($('#asOf'), periodLabel());
   const u = state.user;
   setHtml(
     $('#userArea'),
@@ -152,11 +159,18 @@ function refreshCurrent() {
 // Session
 // ---------------------------------------------------------------------------
 
-function onLoggedIn(user) {
+async function onLoggedIn(user) {
   state.user = user;
   if (user.mustChangePassword) {
     route();
     return;
+  }
+  // The header's Period figure depends on this account's own visible entries, unknown before login.
+  try {
+    const boot = await api('GET', '/api/bootstrap');
+    state.earliestEntryDate = boot.earliestEntryDate;
+  } catch (_) {
+    /* header will pick it up on the next refresh */
   }
   toast(`Welcome, ${user.displayName}.`);
   startLiveUpdates();
@@ -167,8 +181,14 @@ function promptForcedPasswordChange() {
   if (isModalOpen()) return;
   showChangePassword({
     forced: true,
-    onDone(user) {
+    async onDone(user) {
       state.user = user;
+      try {
+        const boot = await api('GET', '/api/bootstrap');
+        state.earliestEntryDate = boot.earliestEntryDate;
+      } catch (_) {
+        /* header will pick it up on the next refresh */
+      }
       startLiveUpdates();
       go(user.home);
     },
@@ -240,6 +260,7 @@ async function start() {
       ageBuckets: boot.ageBuckets,
       defaultParticulars: boot.defaultParticulars,
       roles: boot.roles,
+      earliestEntryDate: boot.earliestEntryDate,
     });
   } catch (err) {
     setHtml($('#app'), html`<div class="empty empty--error empty--tall">${err.message}</div>`);
@@ -281,7 +302,8 @@ async function start() {
         location.reload();
         return;
       }
-      $('#asOf').textContent = fmtDate(state.today);
+      state.earliestEntryDate = boot.earliestEntryDate;
+      $('#asOf').textContent = periodLabel();
       refreshCurrent();
     } catch (_) {
       /* network hiccup; try again next tick */

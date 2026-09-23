@@ -42,8 +42,7 @@ function card(label, value, meta, modifier = '', kpi = null) {
 const entriesWord = (n) => plural(n, 'entry', 'entries');
 
 /**
- * The six figures management reads first. Everything comes from the database.
- *   Total Suspense Amount        everything ever given (original amounts)
+ * The five figures management reads first. Everything comes from the database.
  *   Open Amount                  balance of entries with nothing returned yet
  *   Partially Settled Amount     balance still pending on part-returned entries
  *   Closed Amount                what was given in entries that are now fully returned
@@ -51,13 +50,6 @@ const entriesWord = (n) => plural(n, 'entry', 'entries');
  */
 export function summaryCards(c) {
   return html`<div class="cards" data-role="kpi-cards">
-    ${card(
-      'Total Suspense Amount',
-      fmtMoney(c.totalOriginalPaise),
-      `Returned ${fmtMoney(c.totalReturnedPaise)} · Balance ${fmtMoney(c.totalBalancePaise)}`,
-      '',
-      'ALL'
-    )}
     ${card(
       'Open Amount',
       fmtMoney(c.openAmountPaise),

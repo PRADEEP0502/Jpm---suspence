@@ -62,8 +62,6 @@ export function render(main) {
     try {
       const data = await api('GET', '/api/dashboard');
       setHtml($('[data-role="cards"]', main), myCards(data.cards));
-      const asOf = document.getElementById('asOf');
-      if (asOf && data.today) asOf.textContent = data.today.split('-').reverse().join('/');
     } catch (err) {
       setHtml($('[data-role="cards"]', main), html`<div class="empty empty--error">${err.message}</div>`);
     }

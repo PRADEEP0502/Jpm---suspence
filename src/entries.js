@@ -227,6 +227,17 @@ async function listEntries(query, user) {
   return { today, status, entries, totals };
 }
 
+/**
+ * The earliest entry date this user is allowed to see (Open and Closed both count; a soft-deleted
+ * entry doesn't, since it's no longer a real suspense record). Drives the "Period: ... – ..." header.
+ */
+async function earliestEntryDate(user) {
+  const doc = await db.collections
+    .entries()
+    .findOne({ isDeleted: false, ...scopeFilter(user) }, { projection: { entryDate: 1 }, sort: { entryDate: 1 } });
+  return doc ? doc.entryDate : null;
+}
+
 /** Dashboard figures, calculated from the entries this user is allowed to see. */
 async function dashboardSummary(user) {
   const today = todayISO();
@@ -760,6 +771,7 @@ module.exports = {
   getEntry,
   listEntries,
   dashboardSummary,
+  earliestEntryDate,
   lookups,
   nextSrn,
   createEntry,

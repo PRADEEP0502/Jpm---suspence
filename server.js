@@ -111,13 +111,15 @@ function buildApp() {
 
   api.get(
     '/bootstrap',
-    wrap((req) => ({
+    wrap(async (req) => ({
       user: req.user,
       today: todayISO(),
       timezone: TIMEZONE,
       ageBuckets: AGE_BUCKETS,
       defaultParticulars: DEFAULT_PARTICULARS,
       roles: permissions.ROLES.map((r) => ({ key: r, label: permissions.ROLE_LABELS[r] })),
+      // The header's "Period: ... - ..." starts at the earliest entry this signed-in user may see.
+      earliestEntryDate: req.user ? await entries.earliestEntryDate(req.user) : null,
     }))
   );
 

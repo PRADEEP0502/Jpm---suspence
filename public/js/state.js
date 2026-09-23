@@ -6,6 +6,7 @@ export const state = {
   ageBuckets: [],
   defaultParticulars: [],
   roles: [], // [{ key, label }]
+  earliestEntryDate: null, // YYYY-MM-DD of this user's oldest visible entry, or null if they have none
 };
 
 export const isLoggedIn = () => !!state.user;

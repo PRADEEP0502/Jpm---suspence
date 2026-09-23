@@ -34,7 +34,7 @@ Records are linked to a login by the **Given To** name: the name on an entry mus
 
 ## Dashboard
 
-Six cards from live database totals: Total Suspense Amount, Open Amount, Partially Settled Amount, Closed Amount, Open Entries, Partially Settled Entries. Under them an Aging Summary (0-7, 8-15, 16-30, 31-60, 60+ days), the pending table, and person-wise and particulars summaries. Closed entries are in Closed History; All Suspense lists everything with filters.
+Five cards from live database totals: Open Amount, Partially Settled Amount, Closed Amount, Open Entries, Partially Settled Entries. Each card is clickable and opens the exact entries behind that figure. Under them an Aging Summary (0-7, 8-15, 16-30, 31-60, 60+ days), the pending table, and person-wise and particulars summaries. Closed entries are in Closed History; All Suspense lists everything with filters.
 
 ## Reports
 
