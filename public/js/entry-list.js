@@ -35,7 +35,7 @@ const COLUMNS = {
     sort: (e) => e.balancePaise,
     cell: (e) =>
       e.balancePaise
-        ? html`<span class="amount">${fmtMoney(e.balancePaise)}</span>`
+        ? html`<span class="balance-amount">${fmtMoney(e.balancePaise)}</span>`
         : html`<span class="muted">${fmtMoney(0)}</span>`,
     cls: 'num',
   },

@@ -147,7 +147,7 @@ export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
             </div></td>
             ${amountCols.map(
               ([label, key]) =>
-                html`<td data-label="${label}" class="num ${key === 'balanceAmountPaise' && r[key] ? 'strong' : ''} ${r[key]
+                html`<td data-label="${label}" class="num ${key === 'balanceAmountPaise' && r[key] ? 'balance-amount' : ''} ${r[key]
                   ? ''
                   : 'muted'}">${fmtMoney(r[key])}</td>`
             )}

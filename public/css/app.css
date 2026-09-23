@@ -810,6 +810,10 @@ textarea {
 .amount {
   font-weight: 600;
 }
+.balance-amount {
+  font-weight: 600;
+  color: var(--danger);
+}
 .row-link {
   color: var(--text);
   font-weight: 600;
@@ -1559,6 +1563,7 @@ textarea {
   font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  color: var(--danger);
 }
 .entry-card.is-closed .ec-amount {
   color: var(--text-2);

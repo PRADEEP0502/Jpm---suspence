@@ -118,7 +118,7 @@ export async function showEntryDetail(entryOrId) {
           <div class="detail-what">${e.particulars}</div>
         </div>
         <div class="detail-amount-wrap">
-          <div class="detail-amount">${fmtMoney(e.status === 'CLOSED' ? e.amountPaise : e.balancePaise)}</div>
+          <div class="detail-amount ${e.status !== 'CLOSED' && e.balancePaise ? 'balance-amount' : ''}">${fmtMoney(e.status === 'CLOSED' ? e.amountPaise : e.balancePaise)}</div>
           <div class="detail-amount-note">${e.status === 'CLOSED' ? 'returned in full' : 'balance to come back'}</div>
           ${statusBadge(e)}
         </div>
@@ -138,7 +138,7 @@ export async function showEntryDetail(entryOrId) {
       <h3 class="section-label">Return Summary</h3>
       <dl class="detail-grid">
         ${detailItem('Total Returned', fmtMoney(e.returnedPaise))}
-        ${detailItem('Balance Amount', html`<strong>${fmtMoney(e.balancePaise)}</strong>`)}
+        ${detailItem('Balance Amount', e.balancePaise ? html`<strong class="balance-amount">${fmtMoney(e.balancePaise)}</strong>` : html`<strong>${fmtMoney(0)}</strong>`)}
         ${detailItem('Status', statusBadge(e))}
         ${e.status === 'CLOSED'
           ? html`${detailItem('Closed Date', fmtDate(e.closedDate))} ${detailItem('Closed By', e.closedBy)}`
