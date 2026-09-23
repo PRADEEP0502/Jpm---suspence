@@ -2162,6 +2162,11 @@ textarea {
 /* ------------------------------------------------------------------ Print */
 
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
   /* Always print the full table, never the phone cards. */
   .entry-list.is-cards .table-wrap {
     display: block !important;
@@ -2171,7 +2176,7 @@ textarea {
   }
   body {
     background: #fff;
-    font-size: 12px;
+    font-size: 11px;
   }
   .nav,
   .user-area,
@@ -2182,6 +2187,7 @@ textarea {
   .actions,
   .toasts,
   .skip-link,
+  .live-chip,
   .btn {
     display: none !important;
   }
@@ -2199,7 +2205,34 @@ textarea {
     box-shadow: none;
     break-inside: avoid;
   }
+
+  /* A table that scrolls sideways on screen must never be clipped on paper: let it lay
+     out at its natural (shrink-to-fit) width instead of hiding whatever falls outside
+     the on-screen scroll box. */
+  .table-wrap {
+    overflow: visible !important;
+    width: auto !important;
+  }
+  .data-table {
+    font-size: 10px;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 5px 6px;
+  }
   .data-table tr {
     break-inside: avoid;
+  }
+  thead {
+    display: table-header-group; /* repeat the header on every printed page */
+  }
+  /* Sort controls only make sense on screen. */
+  .th-sort {
+    display: inline;
+    pointer-events: none;
+    color: inherit;
+  }
+  .sort-icon {
+    display: none;
   }
 }
