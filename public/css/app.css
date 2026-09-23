@@ -20,6 +20,7 @@
   --primary-line: #c6d5ea;
   --topbar: #1b2f4b;
   --topbar-2: #243c5e;
+  --accent-gold: #c9a35a;
 
   --danger: #b42318;
   --danger-hover: #912018;
@@ -165,13 +166,25 @@ textarea {
 }
 
 .topbar {
-  background: var(--topbar);
+  position: relative;
+  background: linear-gradient(135deg, var(--topbar) 0%, var(--topbar-2) 100%);
   color: #fff;
+  box-shadow: 0 2px 12px rgba(8, 14, 26, 0.28);
+}
+.topbar::after {
+  /* A thin gold hairline under the header reads as a bank/enterprise mark, not decoration for its own sake. */
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-gold) 0%, rgba(201, 163, 90, 0) 65%);
 }
 .topbar-inner {
   max-width: 1360px;
   margin: 0 auto;
-  padding: 10px 24px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -194,11 +207,14 @@ textarea {
   width: 40px;
   height: 40px;
   border-radius: var(--radius);
-  background: #fff;
+  background: linear-gradient(160deg, #ffffff 0%, #dbe4f0 100%);
   color: var(--topbar);
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.02em;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(201, 163, 90, 0.5);
 }
 .brand-text {
   display: flex;
@@ -207,12 +223,13 @@ textarea {
 }
 .brand-title {
   font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .brand-sub {
   font-size: 12.5px;
   color: #b9c6d8;
+  letter-spacing: 0.01em;
 }
 
 /* Live-updates indicator in the header. */
@@ -230,6 +247,21 @@ textarea {
   height: 7px;
   border-radius: 50%;
   background: #4caf73;
+  box-shadow: 0 0 0 0 rgba(76, 175, 115, 0.6);
+}
+.live-chip--live::before {
+  animation: live-pulse 2s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 115, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(76, 175, 115, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 115, 0);
+  }
 }
 .live-chip--live,
 .live-chip--offline {
@@ -256,16 +288,20 @@ textarea {
   margin-right: 6px;
 }
 .user-name {
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 .user-role {
-  font-size: 12px;
-  color: #b9c6d8;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-gold);
 }
 .user-role--view {
   margin-right: 6px;
   padding: 2px 8px;
-  border: 1px solid #4a5f7e;
+  border: 1px solid rgba(201, 163, 90, 0.5);
   border-radius: 999px;
 }
 
@@ -586,13 +622,13 @@ textarea {
   width: 100%;
 }
 .btn--topbar {
-  background: transparent;
-  border-color: #4a5f7e;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
   color: #fff;
 }
 .btn--topbar:hover {
-  background: var(--topbar-2);
-  border-color: #6b80a0;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(201, 163, 90, 0.6);
 }
 
 .icon-btn {
@@ -2281,5 +2317,11 @@ textarea {
   }
   .sort-icon {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-chip--live::before {
+    animation: none;
   }
 }
