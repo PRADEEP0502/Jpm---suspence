@@ -6,19 +6,19 @@ An internal web application that tracks suspense amounts given to people, record
 
 | Role | Sees | Can do |
 | --- | --- | --- |
-| **Normal User** | Only their own records and return history | View only |
-| **Entry User** | All records | Add, edit, add returns (closing is automatic). No user management |
+| **Money Receiver** (role key `NORMAL`) | Only their own records and return history | View only |
+| **Money Giver** (role key `ENTRY`) | All records | Add, edit, add returns (closing is automatic). No user management |
 | **Administrator** | Everything | Everything, plus Users, Permissions, Reports, Settings |
 | **Managing Director** | Everything | Same as Administrator |
 
-Permissions are enforced on the server for every API request and in every database query, not only hidden on screen. For example a Normal User calling `GET /api/suspense?userId=someone-else` gets `403`, and no API response, search, filter or summary ever contains another person's records. The whole matrix is in [src/permissions.js](src/permissions.js) and is shown on the Permissions page.
+Permissions are enforced on the server for every API request and in every database query, not only hidden on screen. For example a Money Receiver calling `GET /api/suspense?userId=someone-else` gets `403`, and no API response, search, filter or summary ever contains another person's records. The whole matrix is in [src/permissions.js](src/permissions.js) and is shown on the Permissions page.
 
 Records are linked to a login by the **Given To** name: the name on an entry must match a user's Name. Entries created before a login exists are linked automatically when the login is created or renamed.
 
 ## Menus
 
-- Normal User: My Suspense, My History, Profile, Logout
-- Entry User: Dashboard, All Suspense, Add Entry, Closed History, Person Summary, Logout
+- Money Receiver: My Suspense, My History, Profile, Logout
+- Money Giver: Dashboard, All Suspense, Add Entry, Closed History, Person Summary, Logout
 - Administrator / MD: the above plus Users, Permissions, Reports, Settings
 
 ## How suspense entries work
@@ -62,7 +62,7 @@ npm start
 Open http://localhost:3000.
 
 - The first administrator is created on first start: login `admin`, password `Admin@123`. You must set a new password at first sign-in.
-- On an empty database, sample data is added: entries SRN-001, SRN-002, SRN-003 and sample users `ashok`, `vanitha`, `jaya` (Normal Users, password `Welcome@123`, must change at first login). A database that already has entries is left untouched.
+- On an empty database, sample data is added: entries SRN-001, SRN-002, SRN-003 and sample users `ashok`, `vanitha`, `jaya` (Money Receivers, password `Welcome@123`, must change at first login). A database that already has entries is left untouched.
 - Administrators create the other logins under Users. Employee ID is the login name.
 
 ## Settings

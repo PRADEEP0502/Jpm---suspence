@@ -20,8 +20,8 @@
 const ROLES = ['NORMAL', 'ENTRY', 'ADMIN', 'MD'];
 
 const ROLE_LABELS = {
-  NORMAL: 'Normal User',
-  ENTRY: 'Entry User',
+  NORMAL: 'Money Receiver',
+  ENTRY: 'Money Giver',
   ADMIN: 'Administrator',
   MD: 'Managing Director',
 };
