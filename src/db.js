@@ -91,6 +91,7 @@ async function openDatabase() {
   healthy = true;
   await upgradeEntriesForReturns();
   await upgradeForRoles();
+  await upgradeEntriesForAssignment();
   await ensureIndexes();
   const isNew =
     (await collections.entries().countDocuments({}, { limit: 1 })) === 0 &&
@@ -157,6 +158,19 @@ async function upgradeForRoles() {
     const days = Math.max(0, Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000));
     await collections.entries().updateOne({ _id: e._id }, { $set: { finalAgeDays: days } });
   }
+}
+
+/**
+ * Bill assignment upgrade (safe to run on every start): entries created before the Assign feature
+ * existed get a Current Holder equal to the Original Person (Given To), and an empty history.
+ */
+async function upgradeEntriesForAssignment() {
+  const missing = await collections.entries().countDocuments({ currentHolder: { $exists: false } }, { limit: 1 });
+  if (!missing) return;
+  await collections.entries().updateMany(
+    { currentHolder: { $exists: false } },
+    [{ $set: { currentHolder: '$whom', currentHolderUserId: '$givenToUserId', assignments: [] } }]
+  );
 }
 
 async function ensureIndexes() {

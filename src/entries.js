@@ -89,6 +89,18 @@ function mapReturn(r) {
   };
 }
 
+function mapAssignment(a) {
+  return {
+    id: String(a.id),
+    date: a.date,
+    from: a.from,
+    to: a.to,
+    remark: a.remark ?? null,
+    assignedBy: a.assignedBy ?? null,
+    assignedAt: a.assignedAt ?? null,
+  };
+}
+
 function mapEntry(doc, today) {
   const ageDays = ageOf(doc, today);
   const bucket = bucketForAge(ageDays);
@@ -98,7 +110,10 @@ function mapEntry(doc, today) {
     srnNo: doc.srnNo,
     srn: doc.srn,
     entryDate: doc.entryDate,
-    whom: doc.whom,
+    whom: doc.whom, // Original Person: who the amount was originally given to. Never changes.
+    currentHolder: doc.currentHolder ?? doc.whom, // who currently holds it; moves on each Assign
+    currentHolderUserId: doc.currentHolderUserId ?? null,
+    assignments: (doc.assignments || []).map(mapAssignment),
     particulars: doc.particulars,
     amountPaise: doc.amountPaise, // Original Amount
     returnedPaise,
@@ -436,6 +451,11 @@ async function createEntry(body, user) {
     whom: input.whom,
     whomLower: input.whom.toLowerCase(),
     givenToUserId: given.givenToUserId,
+    // Original Person never changes. Current Holder starts out the same person, and moves with
+    // each Assign action; assignments[] is the from -> to trail shown as the Assignment History.
+    currentHolder: input.whom,
+    currentHolderUserId: given.givenToUserId,
+    assignments: [],
     particulars: input.particulars,
     particularsLower: input.particulars.toLowerCase(),
     amountPaise: input.amountPaise,
@@ -650,6 +670,71 @@ async function addReturn(id, body, user) {
   return mapEntry(updated, today);
 }
 
+/**
+ * Assign: moves who currently holds this entry (e.g. the physical bill/voucher) from one employee to
+ * another. The Original Person (Given To / who "own records" viewing is scoped to) never changes -
+ * only currentHolder does, with every move kept in assignments[] as the Assignment History.
+ */
+async function assignEntry(id, body, user) {
+  const doc = await requireActiveDoc(id);
+  checkVersion(doc, body.version);
+
+  const toName = cleanText(body.to);
+  if (!toName) throw new HttpError(400, 'Select who to assign this to.', { field: 'to' });
+  const target = await users.findByName(toName);
+  if (!target) throw new HttpError(400, 'Select a valid employee from the list.', { field: 'to' });
+
+  const from = doc.currentHolder || doc.whom;
+  if (target.displayName.toLowerCase() === String(from).toLowerCase()) {
+    throw new HttpError(400, `${from} already holds this.`, { field: 'to' });
+  }
+
+  const remark = cleanText(body.remark);
+  if (remark.length > 500) throw new HttpError(400, 'Remark is too long (max 500 characters).', { field: 'remark' });
+
+  const today = todayISO();
+  const assignment = {
+    id: new db.ObjectId(),
+    date: today,
+    from,
+    to: target.displayName,
+    remark: remark || null,
+    assignedBy: user.displayName,
+    assignedByUserId: user.id,
+    assignedAt: new Date(),
+  };
+  const assignments = [...(doc.assignments || []), assignment];
+
+  const result = await db.collections.entries().findOneAndUpdate(
+    { _id: doc._id, version: doc.version, isDeleted: false },
+    {
+      $set: {
+        currentHolder: target.displayName,
+        currentHolderUserId: target._id,
+        assignments,
+        updatedAt: new Date(),
+        updatedBy: user.displayName,
+      },
+      $inc: { version: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+  const updated = updatedDoc(result);
+  if (!updated) {
+    throw new HttpError(409, `${doc.srn} was changed by someone else a moment ago. Please reopen the entry and try again.`, {
+      code: 'VERSION_CONFLICT',
+    });
+  }
+
+  await audit.logAction({
+    entryId: doc._id,
+    action: 'ASSIGN',
+    details: { srn: doc.srn, from, to: target.displayName, remark: remark || null, date: today },
+    user,
+  });
+  return mapEntry(updated, today);
+}
+
 /** There is no manual close: an entry closes itself when its balance reaches zero. */
 async function closeEntry(id) {
   const doc = await requireActiveDoc(id);
@@ -777,6 +862,7 @@ module.exports = {
   createEntry,
   updateEntry,
   addReturn,
+  assignEntry,
   closeEntry,
   reopenEntry,
   deleteEntry,

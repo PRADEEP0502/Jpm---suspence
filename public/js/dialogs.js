@@ -81,6 +81,11 @@ function describeHistory(h) {
               )}.`
             : ''),
       };
+    case 'ASSIGN':
+      return {
+        title: 'Assigned',
+        text: `${d.from} → ${d.to}${d.remark ? ` · Remark: ${d.remark}` : ''}`,
+      };
     case 'DELETE':
       return { title: 'Entry deleted', text: `Reason: ${d.reason}` };
     case 'RESTORE':
@@ -130,6 +135,12 @@ export async function showEntryDetail(entryOrId) {
         ${detailItem('Original Date', fmtDate(e.entryDate))}
         ${detailItem('Original Amount', fmtMoney(e.amountPaise))}
         ${detailItem('Given To', e.whom)}
+        ${detailItem(
+          'Current Holder',
+          e.currentHolder === e.whom
+            ? e.currentHolder
+            : html`${e.currentHolder} <span class="cell-sub">reassigned from ${e.whom}</span>`
+        )}
         ${detailItem('Particulars', e.particulars)}
         ${detailItem(e.status === 'CLOSED' ? 'Age / Days Pending' : 'Age', ageBadge(e, { withLevel: e.status !== 'CLOSED' }))}
         ${detailItem('Remark', e.remark, true)}
@@ -185,6 +196,32 @@ export async function showEntryDetail(entryOrId) {
           </div>`
         : html`<div class="empty">Nothing returned yet. The full ${fmtMoney(e.amountPaise)} is still pending.</div>`}
 
+      ${e.assignments.length
+        ? html`<h3 class="section-label">Assignment History</h3>
+            <div class="table-wrap">
+              <table class="data-table data-table--compact">
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">From</th>
+                    <th scope="col">To</th>
+                    <th scope="col">Remark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${e.assignments.map(
+                    (a) => html`<tr>
+                      <td data-label="Date" class="nowrap">${fmtDate(a.date)}</td>
+                      <td data-label="From">${a.from}</td>
+                      <td data-label="To"><span class="whom">${a.to}</span></td>
+                      <td data-label="Remark">${a.remark || html`<span class="muted">—</span>`}</td>
+                    </tr>`
+                  )}
+                </tbody>
+              </table>
+            </div>`
+        : ''}
+
       ${can('entries:viewAll')
         ? html`<h3 class="section-label">Record Information</h3>
             <dl class="detail-grid detail-grid--audit">
@@ -227,6 +264,7 @@ export async function showEntryDetail(entryOrId) {
         ? html`<button type="button" class="btn" data-act="reopen">Reopen</button>`
         : ''}
       ${can('entries:edit') && live && pending ? html`<button type="button" class="btn" data-act="edit">Edit</button>` : ''}
+      ${can('entries:edit') && live ? html`<button type="button" class="btn" data-act="assign">Assign</button>` : ''}
       ${can('entries:return') && live && pending
         ? html`<button type="button" class="btn btn--primary" data-act="return">+ Add Return</button>`
         : ''}
@@ -240,6 +278,7 @@ export async function showEntryDetail(entryOrId) {
     const actions = {
       edit: () => showEntryForm(e),
       return: () => showReturnDialog(e),
+      assign: () => showAssignDialog(e),
       reopen: () => showReopenDialog(e),
       delete: () => showDeleteDialog(e),
       restore: () => restoreEntry(e),
@@ -569,6 +608,86 @@ export function showReturnDialog(e) {
             ? `${saved.srn}: ${fmtMoney(paise)} returned. Balance is now zero, so it is closed.`
             : `${saved.srn}: ${fmtMoney(paise)} returned. Balance ${fmtMoney(saved.balancePaise)}.`
         );
+        refreshView();
+      } catch (err) {
+        showFieldError(form, err.field, err.message);
+        if (err.status === 409) refreshView();
+      }
+    });
+  };
+  form.addEventListener('submit', submit);
+  btn.addEventListener('click', submit);
+}
+
+// ---------------------------------------------------------------------------
+// Assign: move who currently holds this entry to another employee
+// ---------------------------------------------------------------------------
+
+export async function showAssignDialog(e) {
+  let lookups;
+  try {
+    lookups = await api('GET', '/api/lookups');
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
+  const from = e.currentHolder || e.whom;
+  const options = lookups.employees.filter((emp) => emp.name.toLowerCase() !== from.toLowerCase());
+
+  const m = openModal({ title: `Assign — ${e.srn}` });
+  setHtml(
+    m.body,
+    html`<form class="form" novalidate autocomplete="off">
+      ${entrySummaryBox(e)}
+      <dl class="summary-box-grid" style="margin-bottom:14px">
+        <div><dt>Current Holder</dt><dd class="strong">${from}</dd></div>
+      </dl>
+
+      <div class="field">
+        <label for="a-to">Assign To <span class="req">*</span></label>
+        <select id="a-to" name="to">
+          <option value="">Choose an employee…</option>
+          ${options.map((emp) => html`<option value="${emp.name}">${emp.name}</option>`)}
+        </select>
+        ${options.length ? '' : html`<div class="hint">No other employees have a login yet.</div>`}
+      </div>
+
+      <div class="field">
+        <label>Assign Date</label>
+        <div class="readonly-value">${fmtDate(state.today)}</div>
+        <div class="hint">Always today's date.</div>
+      </div>
+
+      <div class="field">
+        <label for="a-remark">Remark <span class="optional">(optional)</span></label>
+        <input id="a-remark" name="remark" type="text" maxlength="500" placeholder="e.g. Handing over for filing" />
+      </div>
+
+      <div class="form-error" role="alert" hidden></div>
+      <button type="submit" hidden></button>
+    </form>`
+  );
+  setHtml(
+    m.footer,
+    html`<button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn btn--primary" data-save>Assign</button>`
+  );
+
+  const form = $('form', m.body);
+  const btn = $('[data-save]', m.footer);
+
+  const submit = async (ev) => {
+    if (ev) ev.preventDefault();
+    clearFieldErrors(form);
+    const to = form.to.value;
+    if (!to) return showFieldError(form, 'to', 'Choose who to assign this to.');
+    const values = { to, remark: form.remark.value.trim(), version: e.version };
+
+    await withBusy(btn, 'Assigning…', async () => {
+      try {
+        const res = await api('POST', `/api/entries/${e.id}/assign`, values);
+        m.close();
+        toast(`${res.entry.srn}: assigned to ${res.entry.currentHolder}.`);
         refreshView();
       } catch (err) {
         showFieldError(form, err.field, err.message);
