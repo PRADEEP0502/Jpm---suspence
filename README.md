@@ -18,7 +18,7 @@ Records are linked to a login by the **Given To** name: the name on an entry mus
 ## Menus
 
 - Money Receiver: My Suspense, My History, Profile, Logout
-- Money Giver: Dashboard, All Suspense, Add Entry, Closed History, Person Summary, Logout
+- Money Giver: Dashboard, All Suspense, Add Entry, Closed History, Holder Summary, Logout
 - Administrator / MD: the above plus Users, Permissions, Reports, Settings
 
 ## How suspense entries work
@@ -31,14 +31,15 @@ Records are linked to a login by the **Given To** name: the name on an entry mus
 - A return larger than the balance is rejected: "Returned amount cannot be greater than the remaining balance of ₹200."
 - Edit cannot set the Original Amount below what has already been returned.
 - Every add, edit, return, reopen and delete is recorded in an audit trail.
+- **Assign**: each entry has an Original Person (Given To, never changes) and a Current Holder (starts the same, moves whenever someone assigns it to another employee). Assign Date is always today; a Remark is optional. Every move is kept as Assignment History (Date, From, To, Remark). Reassigning does not change who the entry is scoped to for "own records" viewing - that is always the Original Person.
 
 ## Dashboard
 
-Five cards from live database totals: Open Amount, Partially Settled Amount, Closed Amount, Open Entries, Partially Settled Entries. Each card is clickable and opens the exact entries behind that figure. Under them an Aging Summary (0-7, 8-15, 16-30, 31-60, 60+ days), the pending table, and person-wise and particulars summaries. Closed entries are in Closed History; All Suspense lists everything with filters.
+Five cards from live database totals: Open Amount, Partially Settled Amount, Closed Amount, Open Entries, Partially Settled Entries. Each card is clickable and opens the exact entries behind that figure. Under them an Aging Summary (0-7, 8-15, 16-30, 31-60, 60+ days), the pending table, and holder-wise and particulars summaries (Holder Summary groups by who currently holds each entry, not who it was originally given to - see Assign below). Closed entries are in Closed History; All Suspense lists everything with filters.
 
 ## Reports
 
-Administrators and the MD can download CSV files (open in Excel): all suspense, return history, person-wise summary and aging summary.
+Administrators and the MD can download CSV files (open in Excel): all suspense, return history, holder-wise summary and aging summary.
 
 ## Run it locally
 

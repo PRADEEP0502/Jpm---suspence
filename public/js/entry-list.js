@@ -324,6 +324,7 @@ export function mountEntryList(container, config) {
       status: st.status,
       q: st.q,
       whom: cfg.noWhomFilter ? '' : cfg.fixed.whom || st.whom,
+      holder: cfg.fixed.holder || '',
       age: st.age,
       dateFrom: st.dateFrom,
       dateTo: st.dateTo,

@@ -46,12 +46,12 @@ const REPORTS = {
     return toCsv(rows);
   },
 
-  /** Balance still pending, by person. */
-  async 'person-wise'(user) {
-    const { persons } = await entries.dashboardSummary(user);
+  /** Balance still pending, by current holder. */
+  async 'holder-wise'(user) {
+    const { holders } = await entries.dashboardSummary(user);
     return toCsv([
-      ['Person', 'Entries', 'Open Entries', 'Original Amount', 'Returned Amount', 'Balance Amount'],
-      ...persons.map((p) => [p.name, p.totalCount, p.pendingCount, rupees(p.originalAmountPaise), rupees(p.returnedAmountPaise), rupees(p.balanceAmountPaise)]),
+      ['Holder', 'Entries', 'Open Entries', 'Original Amount', 'Returned Amount', 'Balance Amount'],
+      ...holders.map((p) => [p.name, p.totalCount, p.pendingCount, rupees(p.originalAmountPaise), rupees(p.returnedAmountPaise), rupees(p.balanceAmountPaise)]),
     ]);
   },
 
@@ -68,7 +68,7 @@ const REPORTS = {
 const REPORT_LIST = [
   { key: 'all-suspense', title: 'All Suspense', description: 'Every entry with original, returned and balance amounts, age and status.' },
   { key: 'return-history', title: 'Return History', description: 'Every return transaction: date, who returned it, amount and remark, with its SRN.' },
-  { key: 'person-wise', title: 'Person-wise Summary', description: 'Original, returned and balance amount for each person.' },
+  { key: 'holder-wise', title: 'Holder-wise Summary', description: 'Original, returned and balance amount for each current holder.' },
   { key: 'aging', title: 'Aging Summary', description: 'Entries and balance still pending in each age group.' },
 ];
 

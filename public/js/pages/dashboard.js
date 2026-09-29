@@ -49,10 +49,10 @@ export function render(main) {
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">Person-wise Summary</h2>
-              <div class="panel-sub">Who still owes how much. Click a name to see their entries.</div>
+              <h2 class="panel-title">Holder-wise Summary</h2>
+              <div class="panel-sub">Who currently holds how much. Click a name to see their entries.</div>
             </div>
-            <a class="btn btn--sm" href="#/persons">Person Summary</a>
+            <a class="btn btn--sm" href="#/persons">Holder Summary</a>
           </div>
           <div data-role="persons"><div class="empty">Loading…</div></div>
         </section>
@@ -102,10 +102,10 @@ export function render(main) {
     openKpi(c.dataset.kpi);
   });
 
-  // A person's full picture (open and closed) is on the Person Summary page.
+  // A holder's full picture (open and closed) is on the Holder Summary page.
   $('[data-role="persons"]', main).addEventListener('click', (ev) => {
-    const row = ev.target.closest('[data-whom]');
-    if (row) location.hash = `#/persons/${encodeURIComponent(row.dataset.whom)}`;
+    const row = ev.target.closest('[data-holder]');
+    if (row) location.hash = `#/persons/${encodeURIComponent(row.dataset.holder)}`;
   });
 
   async function loadSummary() {
@@ -115,7 +115,7 @@ export function render(main) {
       setHtml($('[data-role="cards"]', main), summaryCards(data.cards));
       setHtml(
         $('[data-role="persons"]', main),
-        groupTable(data.persons, { kind: 'person', limit: 10, rowAttrs: (r) => html`data-whom="${r.name}"` })
+        groupTable(data.holders, { kind: 'holder', limit: 10, rowAttrs: (r) => html`data-holder="${r.name}"` })
       );
       setHtml($('[data-role="particulars"]', main), groupTable(data.particulars, { kind: 'particular', limit: 10 }));
       setHtml($('[data-role="aging"]', main), agingTiles(data.aging));

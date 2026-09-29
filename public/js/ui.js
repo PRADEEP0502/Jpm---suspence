@@ -111,13 +111,13 @@ export function myCards(c) {
 }
 
 /**
- * Person-wise / particular-wise summary:
- * Given To (or Particulars) | Original Amount | Returned Amount | Balance Amount.
- * rowAttrs(row) may return attributes (e.g. data-whom) that make a row clickable.
+ * Holder-wise / particular-wise summary:
+ * Holder (or Particulars) | Original Amount | Returned Amount | Balance Amount.
+ * rowAttrs(row) may return attributes (e.g. data-holder) that make a row clickable.
  */
 export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
   const shown = limit ? rows.slice(0, limit) : rows;
-  const nameLabel = kind === 'person' ? 'Given To' : 'Particulars';
+  const nameLabel = kind === 'holder' ? 'Holder' : 'Particulars';
   // Short labels: the panel heading already says what the table is about.
   const amountCols = [
     ['Original', 'originalAmountPaise'],

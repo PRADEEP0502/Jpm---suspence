@@ -1,34 +1,37 @@
 import { html, setHtml, $, api, fmtMoney, fmtDays, plural } from '../lib.js';
 import { mountEntryList } from '../entry-list.js';
 
-// The person is already named in the panel heading, so the Given To column is left out here.
-const PERSON_PENDING_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
+// A holder doesn't always match Given To (an entry may have been reassigned to them), so Given To
+// stays in the table here even though the holder is already named in the panel heading.
+const PERSON_PENDING_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
 const PERSON_ALL_COLUMNS = [...PERSON_PENDING_COLUMNS, 'closedDate'];
 
 export function render(main, params) {
   const selected = params.name || '';
-  let persons = [];
+  let holders = [];
   let entryList = null;
 
   setHtml(
     main,
     html`<div class="page-head">
         <div>
-          <h1 class="page-title">Person Summary</h1>
-          <p class="page-sub">How much each person was given, has returned and still owes. Select a person to see their entries.</p>
+          <h1 class="page-title">Holder Summary</h1>
+          <p class="page-sub">
+            How much each person currently holds, has returned and still owes. Select a holder to see their entries.
+          </p>
         </div>
       </div>
       <div class="person-layout">
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">Persons</h2>
+              <h2 class="panel-title">Holders</h2>
               <div class="panel-sub" data-role="count"></div>
             </div>
           </div>
           <div class="toolbar">
             <div class="search">
-              <input type="search" data-role="find" placeholder="Find a person" aria-label="Find a person" />
+              <input type="search" data-role="find" placeholder="Find a holder" aria-label="Find a holder" />
             </div>
           </div>
           <div data-role="persons"><div class="empty">Loading…</div></div>
@@ -41,10 +44,10 @@ export function render(main, params) {
 
   function renderPersons() {
     const term = findInput.value.trim().toLowerCase();
-    const shown = term ? persons.filter((p) => p.name.toLowerCase().includes(term)) : persons;
-    $('[data-role="count"]', main).textContent = plural(persons.length, 'person');
+    const shown = term ? holders.filter((p) => p.name.toLowerCase().includes(term)) : holders;
+    $('[data-role="count"]', main).textContent = plural(holders.length, 'holder');
     if (!shown.length) {
-      setHtml($('[data-role="persons"]', main), html`<div class="empty">${persons.length ? 'No matching person.' : 'No entries yet.'}</div>`);
+      setHtml($('[data-role="persons"]', main), html`<div class="empty">${holders.length ? 'No matching holder.' : 'No entries yet.'}</div>`);
       return;
     }
     setHtml(
@@ -53,7 +56,7 @@ export function render(main, params) {
         <table class="data-table data-table--compact">
           <thead>
             <tr>
-              <th scope="col">Person</th>
+              <th scope="col">Holder</th>
               <th scope="col" class="num">Original</th>
               <th scope="col" class="num">Returned</th>
               <th scope="col" class="num">Balance</th>
@@ -65,7 +68,7 @@ export function render(main, params) {
               const isSel = p.name.toLowerCase() === selected.toLowerCase();
               const href = `#/persons/${encodeURIComponent(p.name)}`;
               return html`<tr class="is-clickable ${isSel ? 'is-selected' : ''}" data-href="${href}">
-                <td data-label="Person"><div>
+                <td data-label="Holder"><div>
                   <a class="row-link" href="${href}" ${isSel ? html`aria-current="true"` : ''}>${p.name}</a>
                   <div class="cell-sub">
                     ${plural(p.totalCount, 'entry', 'entries')}${p.pendingCount
@@ -90,11 +93,11 @@ export function render(main, params) {
     if (!selected) {
       setHtml(
         detail,
-        html`<section class="panel"><div class="empty empty--tall">Select a person from the list to see all their suspense entries.</div></section>`
+        html`<section class="panel"><div class="empty empty--tall">Select a holder from the list to see all their suspense entries.</div></section>`
       );
       return;
     }
-    const p = persons.find((x) => x.name.toLowerCase() === selected.toLowerCase());
+    const p = holders.find((x) => x.name.toLowerCase() === selected.toLowerCase());
     if (!p) {
       setHtml(
         detail,
@@ -117,7 +120,7 @@ export function render(main, params) {
       <div class="card">
         <div class="card-label">Original Amount</div>
         <div class="card-value">${fmtMoney(p.originalAmountPaise)}</div>
-        <div class="card-meta">${plural(p.totalCount, 'entry', 'entries')}</div>
+        <div class="card-meta">${plural(p.totalCount, 'entry', 'entries')} currently held</div>
       </div>
       <div class="card">
         <div class="card-label">Longest Waiting</div>
@@ -133,7 +136,7 @@ export function render(main, params) {
             <div class="panel-head">
               <div>
                 <h2 class="panel-title">${p.name}</h2>
-                <div class="panel-sub">Suspense summary for this person</div>
+                <div class="panel-sub">Suspense summary for entries this holder currently has</div>
               </div>
               <a class="btn btn--sm" href="#/persons">Clear selection</a>
             </div>
@@ -142,7 +145,7 @@ export function render(main, params) {
           <div data-role="person-entries"></div>`
       );
       entryList = mountEntryList($('[data-role="person-entries"]', detail), {
-        id: `person:${p.name.toLowerCase()}`,
+        id: `holder:${p.name.toLowerCase()}`,
         title: (status) =>
           ({ PENDING: 'Open', OPEN: 'Open', PARTIAL: 'Partially Settled', CLOSED: 'Closed' })[status]
             ? `${{ PENDING: 'Open', OPEN: 'Open', PARTIAL: 'Partially Settled', CLOSED: 'Closed' }[status]} Entries — ${p.name}`
@@ -155,7 +158,7 @@ export function render(main, params) {
         ],
         defaultStatus: 'ALL',
         columns: (status) => (status === 'CLOSED' ? PERSON_ALL_COLUMNS : PERSON_ALL_COLUMNS),
-        fixed: { whom: p.name },
+        fixed: { holder: p.name },
         actions: true,
       });
       if (window.innerWidth < 960) detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -166,7 +169,7 @@ export function render(main, params) {
   async function load() {
     try {
       const data = await api('GET', '/api/dashboard');
-      persons = data.persons;
+      holders = data.holders;
       renderPersons();
       renderDetail();
     } catch (err) {

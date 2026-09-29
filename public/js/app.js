@@ -33,7 +33,7 @@ const ROUTES = {
   all: { page: allPage, title: 'All Suspense', perm: ['entries:viewAll'], label: 'All Suspense' },
   add: { page: addPage, title: 'Add Entry', perm: ['entries:add'], label: 'Add Entry' },
   closed: { page: closedPage, title: 'Closed History', perm: ['entries:viewAll'], label: 'Closed History' },
-  persons: { page: personsPage, title: 'Person Summary', perm: ['entries:viewAll'], label: 'Person Summary' },
+  persons: { page: personsPage, title: 'Holder Summary', perm: ['entries:viewAll'], label: 'Holder Summary' },
   users: { page: usersPage, title: 'Users', perm: ['users:manage'], label: 'Users' },
   permissions: { page: permissionsPage, title: 'Permissions', perm: ['users:manage'], label: 'Permissions' },
   reports: { page: reportsPage, title: 'Reports', perm: ['reports:view'], label: 'Reports' },

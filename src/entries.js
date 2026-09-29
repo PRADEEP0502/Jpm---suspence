@@ -209,6 +209,9 @@ async function listEntries(query, user) {
   const whom = cleanText(query.whom);
   if (whom) filter.whomLower = whom.toLowerCase();
 
+  const holder = cleanText(query.holder);
+  if (holder) filter.currentHolderLower = holder.toLowerCase();
+
   const dateField = query.dateField === 'closed' ? 'closedDate' : 'entryDate';
   const dateRange = {};
   if (isValidISODate(query.dateFrom)) dateRange.$gte = query.dateFrom;
@@ -285,7 +288,7 @@ async function dashboardSummary(user) {
     closedCount: 0,
     oldestPendingDays: null,
   });
-  const persons = new Map();
+  const holders = new Map();
   const particulars = new Map();
   const aging = AGE_BUCKETS.map((b) => ({ ...b, count: 0, amountPaise: 0 }));
   const group = (map, name) => {
@@ -320,7 +323,7 @@ async function dashboardSummary(user) {
       b.amountPaise += e.balancePaise; // aging is about money still outstanding
     }
 
-    for (const g of [group(persons, e.whom), group(particulars, e.particulars)]) {
+    for (const g of [group(holders, e.currentHolder), group(particulars, e.particulars)]) {
       g.totalCount += 1;
       g.originalAmountPaise += e.amountPaise;
       g.returnedAmountPaise += e.returnedPaise;
@@ -339,7 +342,7 @@ async function dashboardSummary(user) {
     today,
     cards,
     aging,
-    persons: [...persons.values()].sort(
+    holders: [...holders.values()].sort(
       (a, b) => b.balanceAmountPaise - a.balanceAmountPaise || b.originalAmountPaise - a.originalAmountPaise || byName(a, b)
     ),
     particulars: [...particulars.values()].sort(
@@ -454,6 +457,7 @@ async function createEntry(body, user) {
     // Original Person never changes. Current Holder starts out the same person, and moves with
     // each Assign action; assignments[] is the from -> to trail shown as the Assignment History.
     currentHolder: input.whom,
+    currentHolderLower: input.whom.toLowerCase(),
     currentHolderUserId: given.givenToUserId,
     assignments: [],
     particulars: input.particulars,
@@ -710,6 +714,7 @@ async function assignEntry(id, body, user) {
     {
       $set: {
         currentHolder: target.displayName,
+        currentHolderLower: target.displayName.toLowerCase(),
         currentHolderUserId: target._id,
         assignments,
         updatedAt: new Date(),

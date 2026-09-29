@@ -62,7 +62,7 @@ const wrapWrite = (fn) =>
 function ownScopeGuard(req, _res, next) {
   if (!req.user || can(req.user, 'entries:viewAll')) return next();
   const mine = new Set([req.user.id, req.user.username, req.user.displayName].map((s) => String(s).toLowerCase()));
-  for (const key of ['userId', 'givenToUserId', 'employeeId', 'user', 'username', 'person', 'whom', 'givenTo']) {
+  for (const key of ['userId', 'givenToUserId', 'employeeId', 'user', 'username', 'person', 'whom', 'givenTo', 'holder']) {
     const raw = req.query[key];
     if (raw === undefined || raw === '') continue;
     const values = Array.isArray(raw) ? raw : [raw];

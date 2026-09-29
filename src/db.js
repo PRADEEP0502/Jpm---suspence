@@ -169,7 +169,16 @@ async function upgradeEntriesForAssignment() {
   if (!missing) return;
   await collections.entries().updateMany(
     { currentHolder: { $exists: false } },
-    [{ $set: { currentHolder: '$whom', currentHolderUserId: '$givenToUserId', assignments: [] } }]
+    [
+      {
+        $set: {
+          currentHolder: '$whom',
+          currentHolderLower: '$whomLower',
+          currentHolderUserId: '$givenToUserId',
+          assignments: [],
+        },
+      },
+    ]
   );
 }
 
@@ -180,6 +189,7 @@ async function ensureIndexes() {
     { key: { isDeleted: 1, status: 1 }, name: 'state' },
     { key: { entryDate: 1 }, name: 'entry_date' },
     { key: { whomLower: 1 }, name: 'whom' },
+    { key: { currentHolderLower: 1 }, name: 'current_holder' },
     { key: { particularsLower: 1 }, name: 'particulars' },
     { key: { givenToUserId: 1, isDeleted: 1 }, name: 'given_to_user' },
   ]);
