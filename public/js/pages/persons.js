@@ -55,7 +55,6 @@ export function render(main, params) {
           <thead>
             <tr>
               <th scope="col">Holder</th>
-              <th scope="col" class="num">Original</th>
               <th scope="col" class="num">Returned</th>
               <th scope="col" class="num">Balance</th>
               <th scope="col" class="num">Open Entries</th>
@@ -74,7 +73,6 @@ export function render(main, params) {
                       : ''}
                   </div>
                 </div></td>
-                <td data-label="Original" class="num">${fmtMoney(p.originalAmountPaise)}</td>
                 <td data-label="Returned" class="num ${p.returnedAmountPaise ? '' : 'muted'}">${fmtMoney(p.returnedAmountPaise)}</td>
                 <td data-label="Balance" class="num ${p.balanceAmountPaise ? 'strong' : 'muted'}">${fmtMoney(p.balanceAmountPaise)}</td>
                 <td data-label="Open Entries" class="num ${p.pendingCount ? 'strong' : 'muted'}">${p.pendingCount}</td>
