@@ -47,44 +47,15 @@ const entriesWord = (n) => plural(n, 'entry', 'entries');
  *   Partially Settled Amount     balance still pending on part-returned entries
  *   Closed Amount                what was given in entries that are now fully returned
  *   Open Entries / Partially Settled Entries   how many of each
+ * Card captions stay short and plain (e.g. "34 Pending") so office staff read them at a glance.
  */
 export function summaryCards(c) {
   return html`<div class="cards" data-role="kpi-cards">
-    ${card(
-      'Open Amount',
-      fmtMoney(c.openAmountPaise),
-      `Nothing returned yet · ${entriesWord(c.openCount)}`,
-      'open',
-      'OPEN'
-    )}
-    ${card(
-      'Partially Settled Amount',
-      fmtMoney(c.partialAmountPaise),
-      `Balance left of ${fmtMoney(c.partialOriginalPaise)} given`,
-      'partial',
-      'PARTIAL'
-    )}
-    ${card(
-      'Closed Amount',
-      fmtMoney(c.closedAmountPaise),
-      `Fully returned · ${entriesWord(c.closedCount)}`,
-      'closed',
-      'CLOSED'
-    )}
-    ${card(
-      'Open Entries',
-      c.openCount,
-      c.pendingCount ? `Longest waiting (all pending): ${fmtDays(c.oldestPendingDays)}` : 'Nothing pending',
-      '',
-      'OPEN'
-    )}
-    ${card(
-      'Partially Settled Entries',
-      c.partialCount,
-      c.partialCount ? 'Some money returned, balance pending' : 'None',
-      '',
-      'PARTIAL'
-    )}
+    ${card('Open Amount', fmtMoney(c.openAmountPaise), `${c.openCount} Pending`, 'open', 'OPEN')}
+    ${card('Partially Settled Amount', fmtMoney(c.partialAmountPaise), `${c.partialCount} Pending`, 'partial', 'PARTIAL')}
+    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `${c.closedCount} Closed`, 'closed', 'CLOSED')}
+    ${card('Open Entries', c.openCount, `${c.openCount} Pending`, '', 'OPEN')}
+    ${card('Partially Settled Entries', c.partialCount, `${c.partialCount} Pending`, '', 'PARTIAL')}
   </div>`;
 }
 
