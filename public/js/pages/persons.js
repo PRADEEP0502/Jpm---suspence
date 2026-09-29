@@ -118,7 +118,6 @@ export function render(main, params) {
       <div class="card">
         <div class="card-label">Original Amount</div>
         <div class="card-value">${fmtMoney(p.originalAmountPaise)}</div>
-        <div class="card-meta">${plural(p.totalCount, 'Entry', 'Entries')}</div>
       </div>
       <div class="card">
         <div class="card-label">Longest Waiting</div>
