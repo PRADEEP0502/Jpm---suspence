@@ -16,9 +16,7 @@ export function render(main, params) {
     html`<div class="page-head">
         <div>
           <h1 class="page-title">Holder Summary</h1>
-          <p class="page-sub">
-            How much each person currently holds, has returned and still owes. Select a holder to see their entries.
-          </p>
+          <p class="page-sub">What each holder has, has returned, and still owes.</p>
         </div>
       </div>
       <div class="person-layout">
@@ -72,7 +70,7 @@ export function render(main, params) {
                   <a class="row-link" href="${href}" ${isSel ? html`aria-current="true"` : ''}>${p.name}</a>
                   <div class="cell-sub">
                     ${plural(p.totalCount, 'entry', 'entries')}${p.pendingCount
-                      ? ` · longest waiting ${fmtDays(p.oldestPendingDays)}`
+                      ? ` · waiting ${fmtDays(p.oldestPendingDays)}`
                       : ''}
                   </div>
                 </div></td>
@@ -93,7 +91,7 @@ export function render(main, params) {
     if (!selected) {
       setHtml(
         detail,
-        html`<section class="panel"><div class="empty empty--tall">Select a holder from the list to see all their suspense entries.</div></section>`
+        html`<section class="panel"><div class="empty empty--tall">Select a holder to see their entries.</div></section>`
       );
       return;
     }
@@ -110,22 +108,22 @@ export function render(main, params) {
       <div class="card card--open">
         <div class="card-label">Balance Amount</div>
         <div class="card-value">${fmtMoney(p.balanceAmountPaise)}</div>
-        <div class="card-meta">${plural(p.pendingCount, 'entry', 'entries')} open</div>
+        <div class="card-meta">${p.pendingCount} Pending</div>
       </div>
       <div class="card card--closed">
         <div class="card-label">Returned Amount</div>
         <div class="card-value">${fmtMoney(p.returnedAmountPaise)}</div>
-        <div class="card-meta">${plural(p.closedCount, 'entry', 'entries')} fully returned</div>
+        <div class="card-meta">${p.closedCount} Closed</div>
       </div>
       <div class="card">
         <div class="card-label">Original Amount</div>
         <div class="card-value">${fmtMoney(p.originalAmountPaise)}</div>
-        <div class="card-meta">${plural(p.totalCount, 'entry', 'entries')} currently held</div>
+        <div class="card-meta">${plural(p.totalCount, 'Entry', 'Entries')}</div>
       </div>
       <div class="card">
         <div class="card-label">Longest Waiting</div>
         <div class="card-value">${p.pendingCount ? fmtDays(p.oldestPendingDays) : '—'}</div>
-        <div class="card-meta">${p.pendingCount ? 'since the amount was given' : 'Nothing pending'}</div>
+        <div class="card-meta">${p.pendingCount ? 'Pending' : 'None'}</div>
       </div>
     </div>`;
 
@@ -136,7 +134,7 @@ export function render(main, params) {
             <div class="panel-head">
               <div>
                 <h2 class="panel-title">${p.name}</h2>
-                <div class="panel-sub">Suspense summary for entries this holder currently has</div>
+                <div class="panel-sub">What ${p.name} currently has</div>
               </div>
               <a class="btn btn--sm" href="#/persons">Clear selection</a>
             </div>
