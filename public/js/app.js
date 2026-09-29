@@ -305,7 +305,7 @@ async function start() {
         return;
       }
       state.earliestEntryDate = boot.earliestEntryDate;
-      $('#asOf').textContent = periodLabel();
+      setHtml($('#asOf'), periodLabel());
       refreshCurrent();
     } catch (_) {
       /* network hiccup; try again next tick */
