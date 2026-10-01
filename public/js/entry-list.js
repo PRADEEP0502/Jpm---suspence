@@ -160,7 +160,8 @@ const STATUS_TITLES = {
 
 // Search box + the filters behind the Filters button (Given To, Date, Age, Amount).
 const FILTER_KEYS = ['whom', 'age', 'dateFrom', 'dateTo', 'amountMin', 'amountMax'];
-const EMPTY_FILTERS = { q: '', ...Object.fromEntries(FILTER_KEYS.map((k) => [k, ''])) };
+// holder sits in the toolbar (always visible), not in the Filters panel, so it is kept out of FILTER_KEYS.
+const EMPTY_FILTERS = { q: '', holder: '', ...Object.fromEntries(FILTER_KEYS.map((k) => [k, ''])) };
 
 // Filter state survives navigating between pages during the session.
 const savedStates = new Map();
@@ -191,6 +192,9 @@ export function mountEntryList(container, config) {
     ...config,
   };
   const st = savedStates.get(cfg.id) || { status: cfg.defaultStatus, ...EMPTY_FILTERS, filtersOpen: false, sort: null };
+  // Staff lists get a one-click "show only this person" picker; it is hidden where the list is
+  // already about one person (My Suspense, a Holder Summary drill-down).
+  const showHolderFilter = !cfg.noWhomFilter && !cfg.fixed.holder;
   savedStates.set(cfg.id, st);
   if (cfg.statusChoices && !cfg.statusChoices.some(([v]) => v === st.status)) st.status = cfg.defaultStatus;
 
@@ -237,6 +241,11 @@ export function mountEntryList(container, config) {
             aria-label="Search entries"
           />
         </div>
+        ${showHolderFilter
+          ? html`<select class="holder-filter" data-f="holder" aria-label="Show entries held by">
+              <option value="">All holders</option>
+            </select>`
+          : ''}
         ${cfg.statusChoices
           ? html`<div class="seg" role="group" aria-label="Status">
               ${cfg.statusChoices.map(
@@ -309,7 +318,7 @@ export function mountEntryList(container, config) {
 
     const activeCount = FILTER_KEYS.filter((k) => st[k]).length;
     el('filter-count').textContent = activeCount ? ` (${activeCount})` : '';
-    el('clear').hidden = !(activeCount || st.q);
+    el('clear').hidden = !(activeCount || st.q || st.holder);
     el('filters').hidden = !st.filtersOpen;
     el('toggle-filters').setAttribute('aria-expanded', String(st.filtersOpen));
   }
@@ -333,7 +342,7 @@ export function mountEntryList(container, config) {
       status: st.status,
       q: st.q,
       whom: cfg.noWhomFilter ? '' : cfg.fixed.whom || st.whom,
-      holder: cfg.fixed.holder || '',
+      holder: cfg.fixed.holder || (showHolderFilter ? st.holder : ''),
       age: st.age,
       dateFrom: st.dateFrom,
       dateTo: st.dateTo,
@@ -351,6 +360,7 @@ export function mountEntryList(container, config) {
       totals = data.totals;
       loaded = true;
       if (!cfg.noWhomFilter) fillSelect($('[data-f="whom"]', container), lookups.persons, 'Everyone');
+      if (showHolderFilter) fillSelect($('[data-f="holder"]', container), lookups.holders || [], 'All holders');
       renderTable();
       cfg.onLoaded(data);
     } catch (err) {

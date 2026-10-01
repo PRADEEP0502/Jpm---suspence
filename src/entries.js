@@ -365,13 +365,15 @@ async function lookups(user) {
     return [...seen.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   };
   const entries = db.collections.entries();
-  const [persons, used, employees] = await Promise.all([
+  const [persons, used, employees, holders] = await Promise.all([
     entries.distinct('whom', { isDeleted: false }),
     entries.distinct('particulars', { isDeleted: false }),
     users.employeeNames(),
+    entries.distinct('currentHolder', { isDeleted: false }),
   ]);
   return {
     persons: uniq([...persons, ...employees.map((e) => e.name)]),
+    holders: uniq(holders.filter(Boolean)), // everyone who currently holds at least one entry
     employees, // people with a login: records given to them are visible to them
     suggestedParticulars: uniq([...DEFAULT_PARTICULARS, ...used]),
   };
