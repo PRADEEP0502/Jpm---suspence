@@ -14,6 +14,11 @@ const COLUMNS = {
   entryDate: { label: 'Date', sort: (e) => e.entryDate, cell: (e) => fmtDate(e.entryDate), cls: 'nowrap' },
   originalDate: { label: 'Original Date', sort: (e) => e.entryDate, cell: (e) => fmtDate(e.entryDate), cls: 'nowrap' },
   whom: { label: 'Given To', sort: (e) => e.whom.toLowerCase(), cell: (e) => html`<span class="whom">${e.whom}</span>` },
+  holder: {
+    label: 'Holder',
+    sort: (e) => (e.currentHolder || e.whom).toLowerCase(),
+    cell: (e) => html`<span class="whom">${e.currentHolder || e.whom}</span>`,
+  },
   particulars: { label: 'Particulars', sort: (e) => e.particulars.toLowerCase(), cell: (e) => e.particulars },
   amount: {
     label: 'Original Amount',
@@ -99,7 +104,11 @@ function entryCard(e, keys) {
     </div>
     <div class="ec-row ec-row--main">
       <div class="ec-who">
-        ${keys.includes('whom') ? html`<div class="whom">${e.whom}</div>` : ''}
+        ${keys.includes('holder')
+          ? html`<div class="whom">${e.currentHolder || e.whom}</div>`
+          : keys.includes('whom')
+            ? html`<div class="whom">${e.whom}</div>`
+            : ''}
         <div class="ec-what">${e.particulars}</div>
       </div>
       <div class="ec-amount">

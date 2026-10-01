@@ -774,7 +774,7 @@ textarea {
 }
 .data-table th,
 .data-table td {
-  padding: 10px 12px;
+  padding: 10px 10px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--row-border);

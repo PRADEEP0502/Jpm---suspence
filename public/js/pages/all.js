@@ -4,7 +4,7 @@ import { mountEntryList } from '../entry-list.js';
 import { showEntryForm } from '../dialogs.js';
 import { ALL_COLUMNS, CLOSED_COLUMNS } from './dashboard.js';
 
-const DELETED_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'status', 'deleted'];
+const DELETED_COLUMNS = ['srn', 'entryDate', 'holder', 'particulars', 'amount', 'returned', 'balance', 'status', 'deleted'];
 
 // Every suspense entry. Buttons in each row depend on the signed-in user's permissions.
 export function render(main, params = {}) {

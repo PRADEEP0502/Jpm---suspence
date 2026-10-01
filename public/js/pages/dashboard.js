@@ -4,13 +4,13 @@ import { summaryCards, groupTable, agingTiles } from '../ui.js';
 import { mountEntryList } from '../entry-list.js';
 
 // Column sets shared by the other pages.
-export const PENDING_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
+export const PENDING_COLUMNS = ['srn', 'entryDate', 'holder', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
 export const ALL_COLUMNS = PENDING_COLUMNS;
 // A closed entry has been returned in full: Balance is zero and the age is the final one.
 export const CLOSED_COLUMNS = [
   'srn',
   'originalDate',
-  'whom',
+  'holder',
   'particulars',
   'amount',
   'returnedTotal',
