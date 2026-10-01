@@ -165,21 +165,23 @@ async function upgradeForRoles() {
  * existed get a Current Holder equal to the Original Person (Given To), and an empty history.
  */
 async function upgradeEntriesForAssignment() {
-  const missing = await collections.entries().countDocuments({ currentHolder: { $exists: false } }, { limit: 1 });
-  if (!missing) return;
   await collections.entries().updateMany(
     { currentHolder: { $exists: false } },
     [
       {
         $set: {
           currentHolder: '$whom',
-          currentHolderLower: '$whomLower',
           currentHolderUserId: '$givenToUserId',
           assignments: [],
         },
       },
     ]
   );
+  // Separate pass: entries created before currentHolderLower existed already have a currentHolder,
+  // so the step above skips them, and the Holder Summary list (which filters on this field) shows nothing.
+  await collections.entries().updateMany({ currentHolderLower: { $exists: false } }, [
+    { $set: { currentHolderLower: { $toLower: '$currentHolder' } } },
+  ]);
 }
 
 async function ensureIndexes() {
