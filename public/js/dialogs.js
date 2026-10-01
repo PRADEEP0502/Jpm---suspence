@@ -531,8 +531,8 @@ export function showReturnDialog(e) {
 
       <div class="field">
         <label for="r-by">Returned By <span class="req">*</span></label>
-        <input id="r-by" name="returnedBy" type="text" maxlength="100" value="${e.whom}" />
-        <div class="hint">Usually the same person the amount was given to.</div>
+        <input id="r-by" name="returnedBy" type="text" maxlength="100" value="${e.currentHolder || e.whom}" />
+        <div class="hint">Usually whoever currently holds this.</div>
       </div>
 
       <div class="field">
