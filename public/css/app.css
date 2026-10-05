@@ -2289,6 +2289,95 @@ textarea {
   }
 }
 
+/* ------------------------------------------------------------------ Holder Summary */
+
+/* A compact row of totals instead of big KPI cards. */
+.stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.stat-strip > div {
+  flex: 1 1 140px;
+  padding: 12px 18px;
+  border-right: 1px solid var(--border);
+}
+.stat-strip > div:last-child {
+  border-right: 0;
+}
+.stat-strip dt {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.stat-strip dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.holder-table td:first-child,
+.holder-table th:first-child {
+  min-width: 140px;
+}
+
+/* The holder table stays a real table on phones (scrolls sideways) instead of turning into cards,
+   with the Holder column pinned so names stay visible while scrolling. */
+@media (max-width: 720px) {
+  .holder-table {
+    display: table;
+    width: 100%;
+    min-width: 640px;
+  }
+  .holder-table thead {
+    display: table-header-group;
+  }
+  .holder-table tbody {
+    display: table-row-group;
+  }
+  .holder-table tr {
+    display: table-row;
+    padding: 0;
+  }
+  .holder-table td,
+  .holder-table th {
+    display: table-cell;
+    width: auto;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--row-border);
+    text-align: left;
+  }
+  .holder-table td::before {
+    content: none;
+  }
+  .holder-table .num {
+    text-align: right;
+  }
+  .holder-table td:first-child,
+  .holder-table th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+  }
+  .holder-table thead th:first-child {
+    background: var(--surface-2);
+  }
+  .stat-strip > div {
+    flex-basis: 33%;
+    padding: 10px 12px;
+  }
+  .stat-strip dd {
+    font-size: 17px;
+  }
+}
+
 /* ------------------------------------------------------------------ Print */
 
 @media print {

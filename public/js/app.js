@@ -144,7 +144,7 @@ function route() {
   const fresh = main.cloneNode(false); // drop old page event listeners
   main.replaceWith(fresh);
   currentView = r.page.render(fresh, { name: arg }, { onLoggedIn });
-  if (name !== 'persons' || !arg) window.scrollTo(0, 0);
+  window.scrollTo(0, 0);
 }
 
 /** Navigate, re-rendering even when the hash is already the target. */
