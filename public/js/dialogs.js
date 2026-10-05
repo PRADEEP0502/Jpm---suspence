@@ -645,6 +645,11 @@ export async function showAssignDialog(input, onDone = () => {}) {
   }
   const holderOf = (x) => x.currentHolder || x.whom;
   const from = holderOf(e);
+  const fixed = lookups.fixed;
+  if (fixed && fixed.missing) {
+    toast('No one is set to receive assigned bills yet. Please ask an Administrator.', 'error');
+    return;
+  }
   // One bill: leave out its current holder. Several: anyone may be chosen; bills already with that person are skipped.
   const options = single
     ? lookups.employees.filter((emp) => emp.name.toLowerCase() !== from.toLowerCase())
@@ -679,16 +684,23 @@ export async function showAssignDialog(input, onDone = () => {}) {
             </div>
           </div>`}
 
-      <div class="field">
-        <label for="a-to">Assign To <span class="req">*</span></label>
-        <select id="a-to" name="to">
-          <option value="">Choose an employee…</option>
-          ${options.map(
-            (emp) => html`<option value="${emp.name}">${emp.name} — Employee ID: ${emp.employeeId}</option>`
-          )}
-        </select>
-        ${options.length ? '' : html`<div class="hint">No other employees have a login yet.</div>`}
-      </div>
+      ${fixed
+        ? html`<div class="field">
+            <label>Assign To</label>
+            <div class="readonly-value">${fixed.name} — Employee ID: ${fixed.employeeId}</div>
+            <input type="hidden" name="to" value="${fixed.name}" />
+            <div class="hint">Your bills always go to ${fixed.name}.</div>
+          </div>`
+        : html`<div class="field">
+            <label for="a-to">Assign To <span class="req">*</span></label>
+            <select id="a-to" name="to">
+              <option value="">Choose an employee…</option>
+              ${options.map(
+                (emp) => html`<option value="${emp.name}">${emp.name} — Employee ID: ${emp.employeeId}</option>`
+              )}
+            </select>
+            ${options.length ? '' : html`<div class="hint">No other employees have a login yet.</div>`}
+          </div>`}
 
       <div class="field">
         <label>Assign Date</label>
@@ -717,7 +729,7 @@ export async function showAssignDialog(input, onDone = () => {}) {
   const confirm = $('[data-role="confirm"]', m.body);
 
   // What will happen, shown before the Assign button is pressed.
-  form.to.addEventListener('change', () => {
+  const showConfirm = () => {
     const to = form.to.value;
     confirm.hidden = !to;
     if (!to) return;
@@ -730,7 +742,9 @@ export async function showAssignDialog(input, onDone = () => {}) {
       `${plural(list.length - already, 'bill', 'bills')} will be assigned to ${to}.` +
       (already ? ` ${plural(already, 'bill is', 'bills are')} already with ${to} and will be skipped.` : '') +
       ' Amounts and status do not change.';
-  });
+  };
+  form.to.addEventListener('change', showConfirm);
+  if (fixed) showConfirm();
 
   const submit = async (ev) => {
     if (ev) ev.preventDefault();

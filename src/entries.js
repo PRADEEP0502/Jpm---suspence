@@ -26,6 +26,7 @@ const db = require('./db');
 const audit = require('./audit');
 const users = require('./users');
 const permissions = require('./permissions');
+const settings = require('./settings');
 const {
   AGE_BUCKETS,
   DEFAULT_PARTICULARS,
@@ -692,7 +693,22 @@ async function addReturn(id, body, user) {
  * another. The Original Person (Given To / who "own records" viewing is scoped to) never changes -
  * only currentHolder does, with every move kept in assignments[] as the Assignment History.
  */
-async function validateAssignInput(body) {
+/**
+ * A Money Receiver does not choose: their bills always go to the person set on the Settings page
+ * (e.g. Gomathi). That person, and staff, choose freely. Enforced here, whatever the browser sends.
+ */
+async function fixedAssigneeFor(user) {
+  if (permissions.can(user, 'entries:edit')) return null;
+  const assignee = await settings.receiverAssignee();
+  if (!assignee) {
+    throw new HttpError(400, 'No one is set to receive assigned bills yet. Please ask an Administrator.', { field: 'to' });
+  }
+  return String(assignee._id) === String(user.id) ? null : assignee;
+}
+
+async function validateAssignInput(body, user) {
+  const fixed = await fixedAssigneeFor(user);
+  if (fixed) body = { ...body, to: fixed.displayName };
   const toName = cleanText(body.to);
   if (!toName) throw new HttpError(400, 'Select who to assign this to.', { field: 'to' });
   const target = await users.findByName(toName);
@@ -713,7 +729,7 @@ async function assignEntry(id, body, user) {
     throw new HttpError(403, 'You can only assign bills you currently hold.', { code: 'FORBIDDEN' });
   }
   checkVersion(doc, body.version);
-  const { target, remark } = await validateAssignInput(body);
+  const { target, remark } = await validateAssignInput(body, user);
   if (alreadyWith(doc, target)) throw new HttpError(400, `${holderOf(doc)} already holds this.`, { field: 'to' });
   return applyAssign(doc, target, remark, user);
 }
@@ -727,7 +743,7 @@ async function assignMany(body, user) {
   const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))] : [];
   if (!ids.length) throw new HttpError(400, 'Select at least one bill to assign.');
   if (ids.length > 500) throw new HttpError(400, 'Too many bills at once (max 500).');
-  const { target, remark } = await validateAssignInput(body);
+  const { target, remark } = await validateAssignInput(body, user);
 
   const assigned = [];
   const skipped = [];

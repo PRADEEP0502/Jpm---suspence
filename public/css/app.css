@@ -2567,3 +2567,13 @@ body.nav-open .menu-toggle span:nth-child(3) {
     display: none !important;
   }
 }
+.assignee-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.assignee-row .holder-filter {
+  max-width: 420px;
+  flex: 1 1 260px;
+}

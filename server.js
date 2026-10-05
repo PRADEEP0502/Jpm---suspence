@@ -24,6 +24,7 @@ const db = require('./src/db');
 const auth = require('./src/auth');
 const entries = require('./src/entries');
 const users = require('./src/users');
+const settings = require('./src/settings');
 const audit = require('./src/audit');
 const backup = require('./src/backup');
 const events = require('./src/events');
@@ -150,10 +151,19 @@ function buildApp() {
   api.get('/dashboard', view, ownScopeGuard, wrap((req) => entries.dashboardSummary(req.user)));
   api.get('/lookups', requirePermission('entries:viewAll'), wrap((req) => entries.lookups(req.user)));
   // Who a bill can be assigned to (name + Employee ID only), for anyone allowed to assign.
+  // `fixed` is set for a Money Receiver: their bills always go to that one person.
   api.get(
     '/assignees',
     requirePermission('entries:edit', 'own:assign'),
-    wrap(async () => ({ employees: await users.employeeNames() }))
+    wrap(async (req) => {
+      let fixed = null;
+      if (!can(req.user, 'entries:edit')) {
+        const a = await settings.receiverAssignee();
+        if (a && String(a._id) !== String(req.user.id)) fixed = { name: a.displayName, employeeId: a.username };
+        else if (!a) fixed = { missing: true };
+      }
+      return { employees: await users.employeeNames(), fixed };
+    })
   );
 
   // Suspense entries. Also reachable as /api/suspense.
@@ -276,7 +286,23 @@ function buildApp() {
           permissions: permissions.permissionsFor(r),
         })),
         permissions: permissions.PERMISSIONS,
+        receiverAssignee: await settings.receiverAssignee().then((a) => (a ? String(a._id) : null)),
+        employees: (
+          await db.collections.users().find({ isActive: true }).project({ displayName: 1, username: 1 }).sort({ displayNameLower: 1 }).toArray()
+        ).map((u) => ({ id: String(u._id), name: u.displayName, employeeId: u.username })),
       };
+    })
+  );
+  api.put(
+    '/system/receiver-assignee',
+    requirePermission('system:manage'),
+    wrapWrite(async (req) => {
+      const userId = req.body.userId ? String(req.body.userId) : null;
+      if (userId && !(await db.collections.users().findOne({ _id: db.toObjectId(userId), isActive: true }))) {
+        throw new HttpError(400, 'Choose an active login.', { field: 'userId' });
+      }
+      const a = await settings.setReceiverAssignee(userId);
+      return { receiverAssignee: a ? String(a._id) : null };
     })
   );
   api.get(
@@ -353,6 +379,7 @@ async function main() {
   }
 
   const admin = await users.ensureDefaultAdmin();
+  await settings.ensureDefaults();
   let sample = null;
   if (info.isNew && config.SEED_SAMPLE_DATA) {
     sample = await seedSampleData();

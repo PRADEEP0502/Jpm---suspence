@@ -1,4 +1,4 @@
-import { html, setHtml, $, api, fmtDate, fmtDateTime } from '../lib.js';
+import { html, setHtml, $, api, fmtDate, fmtDateTime, toast, withBusy } from '../lib.js';
 
 // System information and a backup download. Admin and MD only.
 export function render(main) {
@@ -38,6 +38,30 @@ export function render(main) {
           <section class="panel">
             <div class="panel-head">
               <div>
+                <h2 class="panel-title">Money Receivers' Assign</h2>
+                <div class="panel-sub">
+                  When a Money Receiver presses Assign, their bill goes straight to this person. They do not choose.
+                </div>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="assignee-row">
+                <select class="holder-filter" data-role="assignee" aria-label="Bills go to">
+                  <option value="">— Nobody (Money Receivers cannot assign) —</option>
+                  ${s.employees.map(
+                    (u) => html`<option value="${u.id}" ${u.id === s.receiverAssignee ? html`selected` : ''}>
+                      ${u.name} — Employee ID: ${u.employeeId}
+                    </option>`
+                  )}
+                </select>
+                <button type="button" class="btn btn--primary btn--sm" data-role="save-assignee">Save</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
                 <h2 class="panel-title">Backup</h2>
                 <div class="panel-sub">
                   Download a copy of every entry, return and login (without passwords). Keep it somewhere safe.
@@ -63,6 +87,21 @@ export function render(main) {
       setHtml($('[data-role="body"]', main), html`<div class="empty empty--error">${err.message}</div>`);
     }
   }
+
+  main.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-role="save-assignee"]');
+    if (!btn) return;
+    const userId = $('[data-role="assignee"]', main).value;
+    await withBusy(btn, 'Saving…', async () => {
+      try {
+        await api('PUT', '/api/system/receiver-assignee', { userId: userId || null });
+        const label = $('[data-role="assignee"]', main).selectedOptions[0].textContent.trim().split(' — ')[0];
+        toast(userId ? `Money Receivers' bills will now go to ${label}.` : 'Money Receivers can no longer assign.');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+  });
 
   load();
   return { refresh: load };
