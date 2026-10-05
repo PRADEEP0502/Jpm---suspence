@@ -2065,9 +2065,11 @@ textarea {
   }
 
   /* Dialogs become full-screen sheets with the buttons pinned to the bottom. */
+  /* flex-start, not stretch: a stretched sheet is exactly one screen tall, so a long dialog spilled
+     out of its white background and the page behind showed through when scrolling. */
   .modal-backdrop {
     padding: 0;
-    align-items: stretch;
+    align-items: flex-start;
   }
   .modal,
   .modal--sm,
