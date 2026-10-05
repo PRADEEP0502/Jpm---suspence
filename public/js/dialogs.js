@@ -11,6 +11,7 @@ import {
   fmtDate,
   fmtDateTime,
   fmtDays,
+  plural,
   paiseToInput,
   parseAmountInput,
   clearFieldErrors,
@@ -141,6 +142,9 @@ export async function showEntryDetail(entryOrId) {
             ? e.currentHolder
             : html`${e.currentHolder} <span class="cell-sub">reassigned from ${e.whom}</span>`
         )}
+        ${e.assignedBy
+          ? html`${detailItem('Assigned Date', fmtDate(e.assignedDate))} ${detailItem('Assigned By', e.assignedBy)}`
+          : ''}
         ${detailItem('Particulars', e.particulars)}
         ${detailItem(e.status === 'CLOSED' ? 'Age / Days Pending' : 'Age', ageBadge(e, { withLevel: e.status !== 'CLOSED' }))}
         ${detailItem('Remark', e.remark, true)}
@@ -623,7 +627,15 @@ export function showReturnDialog(e) {
 // Assign: move who currently holds this entry to another employee
 // ---------------------------------------------------------------------------
 
-export async function showAssignDialog(e) {
+/**
+ * Assign one bill (pass the entry) or several (pass an array). Only the Current Holder changes;
+ * amounts, age and status stay as they are. onDone runs after a successful assign.
+ */
+export async function showAssignDialog(input, onDone = () => {}) {
+  const list = Array.isArray(input) ? input : [input];
+  if (!list.length) return;
+  const single = list.length === 1;
+  const e = list[0];
   let lookups;
   try {
     lookups = await api('GET', '/api/lookups');
@@ -631,23 +643,49 @@ export async function showAssignDialog(e) {
     toast(err.message, 'error');
     return;
   }
-  const from = e.currentHolder || e.whom;
-  const options = lookups.employees.filter((emp) => emp.name.toLowerCase() !== from.toLowerCase());
+  const holderOf = (x) => x.currentHolder || x.whom;
+  const from = holderOf(e);
+  // One bill: leave out its current holder. Several: anyone may be chosen; bills already with that person are skipped.
+  const options = single
+    ? lookups.employees.filter((emp) => emp.name.toLowerCase() !== from.toLowerCase())
+    : lookups.employees;
 
-  const m = openModal({ title: `Assign — ${e.srn}` });
+  const m = openModal({ title: single ? `Assign — ${e.srn}` : `Assign ${list.length} Bills` });
   setHtml(
     m.body,
     html`<form class="form" novalidate autocomplete="off">
-      ${entrySummaryBox(e)}
-      <dl class="summary-box-grid" style="margin-bottom:14px">
-        <div><dt>Current Holder</dt><dd class="strong">${from}</dd></div>
-      </dl>
+      ${single
+        ? html`${entrySummaryBox(e)}
+            <dl class="summary-box-grid" style="margin-bottom:14px">
+              <div><dt>Current Holder</dt><dd class="strong">${from}</dd></div>
+            </dl>`
+        : html`<div class="summary-box">
+            <div class="summary-box-row"><strong>${list.length} bills selected</strong></div>
+            <div class="table-wrap">
+              <table class="data-table data-table--compact assign-list">
+                <thead>
+                  <tr><th scope="col">SRN</th><th scope="col">Particulars</th><th scope="col">Current Holder</th></tr>
+                </thead>
+                <tbody>
+                  ${list.map(
+                    (x) => html`<tr>
+                      <td data-label="SRN" class="srn">${x.srn}</td>
+                      <td data-label="Particulars">${x.particulars}</td>
+                      <td data-label="Current Holder">${holderOf(x)}</td>
+                    </tr>`
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>`}
 
       <div class="field">
         <label for="a-to">Assign To <span class="req">*</span></label>
         <select id="a-to" name="to">
           <option value="">Choose an employee…</option>
-          ${options.map((emp) => html`<option value="${emp.name}">${emp.name}</option>`)}
+          ${options.map(
+            (emp) => html`<option value="${emp.name}">${emp.name} — Employee ID: ${emp.employeeId}</option>`
+          )}
         </select>
         ${options.length ? '' : html`<div class="hint">No other employees have a login yet.</div>`}
       </div>
@@ -663,6 +701,7 @@ export async function showAssignDialog(e) {
         <input id="a-remark" name="remark" type="text" maxlength="500" placeholder="e.g. Handing over for filing" />
       </div>
 
+      <p class="assign-confirm" data-role="confirm" hidden></p>
       <div class="form-error" role="alert" hidden></div>
       <button type="submit" hidden></button>
     </form>`
@@ -675,19 +714,45 @@ export async function showAssignDialog(e) {
 
   const form = $('form', m.body);
   const btn = $('[data-save]', m.footer);
+  const confirm = $('[data-role="confirm"]', m.body);
+
+  // What will happen, shown before the Assign button is pressed.
+  form.to.addEventListener('change', () => {
+    const to = form.to.value;
+    confirm.hidden = !to;
+    if (!to) return;
+    if (single) {
+      confirm.textContent = `${e.srn} will be assigned from ${from} to ${to}. Amounts and status do not change.`;
+      return;
+    }
+    const already = list.filter((x) => holderOf(x).toLowerCase() === to.toLowerCase()).length;
+    confirm.textContent =
+      `${plural(list.length - already, 'bill', 'bills')} will be assigned to ${to}.` +
+      (already ? ` ${plural(already, 'bill is', 'bills are')} already with ${to} and will be skipped.` : '') +
+      ' Amounts and status do not change.';
+  });
 
   const submit = async (ev) => {
     if (ev) ev.preventDefault();
     clearFieldErrors(form);
     const to = form.to.value;
     if (!to) return showFieldError(form, 'to', 'Choose who to assign this to.');
-    const values = { to, remark: form.remark.value.trim(), version: e.version };
+    const remark = form.remark.value.trim();
 
     await withBusy(btn, 'Assigning…', async () => {
       try {
-        const res = await api('POST', `/api/entries/${e.id}/assign`, values);
+        if (single) {
+          const res = await api('POST', `/api/entries/${e.id}/assign`, { to, remark, version: e.version });
+          toast(`${res.entry.srn}: assigned to ${res.entry.currentHolder}.`);
+        } else {
+          const res = await api('POST', '/api/entries/assign', { ids: list.map((x) => x.id), to, remark });
+          toast(
+            `${plural(res.assigned.length, 'bill', 'bills')} assigned to ${to}.` +
+              (res.skipped.length ? ` ${res.skipped.length} skipped (already with ${to}).` : '')
+          );
+        }
         m.close();
-        toast(`${res.entry.srn}: assigned to ${res.entry.currentHolder}.`);
+        onDone();
         refreshView();
       } catch (err) {
         showFieldError(form, err.field, err.message);

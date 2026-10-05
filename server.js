@@ -182,6 +182,11 @@ function buildApp() {
     wrapWrite(async (req) => ({ entry: await entries.addReturn(req.params.id, req.body, req.user) }))
   );
   suspense.post(
+    '/assign',
+    requirePermission('entries:edit'),
+    wrapWrite(async (req) => entries.assignMany(req.body, req.user))
+  );
+  suspense.post(
     '/:id/assign',
     requirePermission('entries:edit'),
     wrapWrite(async (req) => ({ entry: await entries.assignEntry(req.params.id, req.body, req.user) }))

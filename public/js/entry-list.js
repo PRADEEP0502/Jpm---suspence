@@ -3,7 +3,7 @@
 import { html, setHtml, $, $$, api, toQuery, debounce, fmtMoney, fmtDate, fmtDateTime, plural } from './lib.js';
 import { state, can } from './state.js';
 import { statusBadge, ageBadge } from './ui.js';
-import { showEntryDetail, showEntryForm, showReturnDialog, restoreEntry } from './dialogs.js';
+import { showEntryDetail, showEntryForm, showReturnDialog, showAssignDialog, restoreEntry } from './dialogs.js';
 
 const COLUMNS = {
   srn: {
@@ -100,11 +100,17 @@ const TEXT_SORT_WORDS = { asc: 'A to Z', desc: 'Z to A' };
 const CARD_BREAKPOINT = 760;
 
 /** Card version of a table row: who / what / amount / date / age / status at a glance. */
-function entryCard(e, keys) {
+function selectBox(e, checked) {
+  return html`<input type="checkbox" class="select-box" data-select="${e.id}" aria-label="Select ${e.srn}" ${checked
+    ? html`checked`
+    : ''} />`;
+}
+
+function entryCard(e, keys, selectable = false, checked = false) {
   const closed = e.status === 'CLOSED';
   return html`<article class="entry-card ${closed ? 'is-closed' : ''}" data-id="${e.id}" tabindex="0">
     <div class="ec-row">
-      <span class="srn">${e.srn}</span>
+      <span class="srn">${selectable ? selectBox(e, checked) : ''}${e.srn}</span>
       ${statusBadge(e)}
     </div>
     <div class="ec-row ec-row--main">
@@ -200,6 +206,9 @@ export function mountEntryList(container, config) {
   // Staff lists get a one-click "show only this person" picker; it is hidden where the list is
   // already about one person (My Suspense, a Holder Summary drill-down).
   const showHolderFilter = !cfg.noWhomFilter && !cfg.fixed.holder;
+  // Staff who may assign can tick several bills and assign them in one go.
+  const canSelect = () => cfg.actions && can('entries:edit') && st.status !== 'DELETED';
+  const selected = new Set();
   savedStates.set(cfg.id, st);
   if (cfg.statusChoices && !cfg.statusChoices.some(([v]) => v === st.status)) st.status = cfg.defaultStatus;
 
@@ -266,6 +275,12 @@ export function mountEntryList(container, config) {
           <select id="${cfg.id}-sort" data-role="sort"></select>
         </div>
         <button type="button" class="btn btn--link" data-role="clear" hidden>Clear filters</button>
+      </div>
+
+      <div class="bulk-bar" data-role="bulk" hidden>
+        <span data-role="bulk-count"></span>
+        <button type="button" class="btn btn--primary btn--sm" data-role="bulk-assign">Assign</button>
+        <button type="button" class="btn btn--link" data-role="bulk-clear">Clear selection</button>
       </div>
 
       <div class="filters" data-role="filters" hidden>
@@ -423,6 +438,9 @@ export function mountEntryList(container, config) {
     }
 
     const sorted = sortedRows();
+    const selectable = canSelect();
+    for (const id of [...selected]) if (!rows.some((r) => String(r.id) === id)) selected.delete(id);
+    const allChecked = selectable && selected.size > 0 && selected.size === rows.length;
     const sortable = keys.filter((key) => COLUMNS[key].sort);
     setHtml(
       el('sort'),
@@ -443,6 +461,13 @@ export function mountEntryList(container, config) {
         <table class="data-table">
           <thead>
             <tr>
+              ${selectable
+                ? html`<th scope="col" class="select-col">
+                    <input type="checkbox" class="select-box" data-role="select-all" aria-label="Select all" ${allChecked
+                      ? html`checked`
+                      : ''} />
+                  </th>`
+                : ''}
               ${keys.map((key) => {
                 const col = COLUMNS[key];
                 const active = sort.key === key;
@@ -461,7 +486,12 @@ export function mountEntryList(container, config) {
           </thead>
           <tbody>
             ${sorted.map(
-              (e) => html`<tr class="is-clickable ${e.status === 'CLOSED' ? 'is-closed' : ''}" data-id="${e.id}" tabindex="0">
+              (e) => html`<tr
+                class="is-clickable ${e.status === 'CLOSED' ? 'is-closed' : ''} ${selected.has(String(e.id)) ? 'is-selected' : ''}"
+                data-id="${e.id}"
+                tabindex="0"
+              >
+                ${selectable ? html`<td class="select-col">${selectBox(e, selected.has(String(e.id)))}</td>` : ''}
                 ${keys.map(
                   (key) =>
                     html`<td class="${COLUMNS[key].cls || ''}" data-label="${COLUMNS[key].label}">${COLUMNS[key].cell(e)}</td>`
@@ -471,13 +501,30 @@ export function mountEntryList(container, config) {
           </tbody>
         </table>
       </div>
-      <div class="entry-cards">${sorted.map((e) => entryCard(e, keys))}</div>`
+      <div class="entry-cards">${sorted.map((e) => entryCard(e, keys, selectable, selected.has(String(e.id))))}</div>`
     );
+    updateBulk();
     el('foot').textContent =
       `Showing ${plural(totals.count, 'entry', 'entries')} · Original ${fmtMoney(totals.amountPaise)}` +
       ` · Returned ${fmtMoney(totals.returnedPaise)} · Balance ${fmtMoney(totals.balancePaise)}` +
       ' · Tap or click an entry to see full details';
     fitLayout();
+  }
+
+  function updateBulk() {
+    const n = canSelect() ? selected.size : 0;
+    el('bulk').hidden = !n;
+    el('bulk-count').textContent = `${plural(n, 'bill', 'bills')} selected`;
+    $$('[data-select]', container).forEach((box) => {
+      box.checked = selected.has(box.dataset.select);
+      const row = box.closest('tr');
+      if (row) row.classList.toggle('is-selected', box.checked);
+    });
+    const all = $('[data-role="select-all"]', container);
+    if (all) {
+      all.checked = n > 0 && n === rows.length;
+      all.indeterminate = n > 0 && n < rows.length;
+    }
   }
 
   /** Use the table when it fits; otherwise (phones, narrow tablets, very wide tables) show cards. */
@@ -526,6 +573,32 @@ export function mountEntryList(container, config) {
 
   container.addEventListener('click', (ev) => {
     const t = ev.target;
+
+    // Ticking a bill must not also open it.
+    const box = t.closest('[data-select]');
+    if (box) {
+      ev.stopPropagation();
+      if (box.checked) selected.add(box.dataset.select);
+      else selected.delete(box.dataset.select);
+      updateBulk();
+      return;
+    }
+    if (t.closest('[data-role="select-all"]')) {
+      if (t.checked) rows.forEach((r) => selected.add(String(r.id)));
+      else selected.clear();
+      updateBulk();
+      return;
+    }
+    if (t.closest('.select-col')) return; // a click in the checkbox cell's padding
+    if (t.closest('[data-role="bulk-clear"]')) {
+      selected.clear();
+      updateBulk();
+      return;
+    }
+    if (t.closest('[data-role="bulk-assign"]')) {
+      showAssignDialog(rows.filter((r) => selected.has(String(r.id))), () => selected.clear());
+      return;
+    }
 
     const statusBtn = t.closest('[data-status]');
     if (statusBtn) {

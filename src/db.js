@@ -177,7 +177,7 @@ async function upgradeEntriesForAssignment() {
       },
     ]
   );
-  // Separate pass: entries created before currentHolderLower existed already have a currentHolder,
+  // Separate step: entries created before currentHolderLower existed already have a currentHolder,
   // so the step above skips them, and the Holder Summary list (which filters on this field) shows nothing.
   await collections.entries().updateMany({ currentHolderLower: { $exists: false } }, [
     { $set: { currentHolderLower: { $toLower: '$currentHolder' } } },

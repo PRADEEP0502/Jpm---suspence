@@ -113,6 +113,8 @@ function mapEntry(doc, today) {
     whom: doc.whom, // Original Person: who the amount was originally given to. Never changes.
     currentHolder: doc.currentHolder ?? doc.whom, // who currently holds it; moves on each Assign
     currentHolderUserId: doc.currentHolderUserId ?? null,
+    assignedDate: doc.assignedDate ?? null,
+    assignedBy: doc.assignedBy ?? null,
     assignments: (doc.assignments || []).map(mapAssignment),
     particulars: doc.particulars,
     amountPaise: doc.amountPaise, // Original Amount
@@ -681,24 +683,66 @@ async function addReturn(id, body, user) {
  * another. The Original Person (Given To / who "own records" viewing is scoped to) never changes -
  * only currentHolder does, with every move kept in assignments[] as the Assignment History.
  */
-async function assignEntry(id, body, user) {
-  const doc = await requireActiveDoc(id);
-  checkVersion(doc, body.version);
-
+async function validateAssignInput(body) {
   const toName = cleanText(body.to);
   if (!toName) throw new HttpError(400, 'Select who to assign this to.', { field: 'to' });
   const target = await users.findByName(toName);
-  if (!target) throw new HttpError(400, 'Select a valid employee from the list.', { field: 'to' });
-
-  const from = doc.currentHolder || doc.whom;
-  if (target.displayName.toLowerCase() === String(from).toLowerCase()) {
-    throw new HttpError(400, `${from} already holds this.`, { field: 'to' });
+  if (!target || target.isActive === false) {
+    throw new HttpError(400, 'Select a valid employee from the list.', { field: 'to' });
   }
-
   const remark = cleanText(body.remark);
   if (remark.length > 500) throw new HttpError(400, 'Remark is too long (max 500 characters).', { field: 'remark' });
+  return { target, remark };
+}
 
+const holderOf = (doc) => doc.currentHolder || doc.whom;
+const alreadyWith = (doc, target) => target.displayName.toLowerCase() === String(holderOf(doc)).toLowerCase();
+
+async function assignEntry(id, body, user) {
+  const doc = await requireActiveDoc(id);
+  checkVersion(doc, body.version);
+  const { target, remark } = await validateAssignInput(body);
+  if (alreadyWith(doc, target)) throw new HttpError(400, `${holderOf(doc)} already holds this.`, { field: 'to' });
+  return applyAssign(doc, target, remark, user);
+}
+
+/**
+ * Assign several bills to one employee in one action. Each bill gets its own history row and audit
+ * entry, exactly as if assigned one by one. Bills already with that employee, deleted, or changed by
+ * someone else meanwhile are reported as skipped rather than failing the whole batch.
+ */
+async function assignMany(body, user) {
+  const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))] : [];
+  if (!ids.length) throw new HttpError(400, 'Select at least one bill to assign.');
+  if (ids.length > 500) throw new HttpError(400, 'Too many bills at once (max 500).');
+  const { target, remark } = await validateAssignInput(body);
+
+  const assigned = [];
+  const skipped = [];
+  for (const id of ids) {
+    const doc = await findDoc(id);
+    if (!doc || doc.isDeleted) {
+      skipped.push({ id, reason: 'not found' });
+      continue;
+    }
+    if (alreadyWith(doc, target)) {
+      skipped.push({ id, srn: doc.srn, reason: `already with ${target.displayName}` });
+      continue;
+    }
+    try {
+      assigned.push(await applyAssign(doc, target, remark, user));
+    } catch (err) {
+      skipped.push({ id, srn: doc.srn, reason: err.message });
+    }
+  }
+  return { assigned, skipped };
+}
+
+/** Only who holds the bill changes; amounts, age and the financial status are left untouched. */
+async function applyAssign(doc, target, remark, user) {
+  const from = holderOf(doc);
   const today = todayISO();
+  const now = new Date();
   const assignment = {
     id: new db.ObjectId(),
     date: today,
@@ -707,7 +751,7 @@ async function assignEntry(id, body, user) {
     remark: remark || null,
     assignedBy: user.displayName,
     assignedByUserId: user.id,
-    assignedAt: new Date(),
+    assignedAt: now,
   };
   const assignments = [...(doc.assignments || []), assignment];
 
@@ -718,8 +762,12 @@ async function assignEntry(id, body, user) {
         currentHolder: target.displayName,
         currentHolderLower: target.displayName.toLowerCase(),
         currentHolderUserId: target._id,
+        assignedDate: today,
+        assignedAt: now,
+        assignedBy: user.displayName,
+        assignedByUserId: user.id,
         assignments,
-        updatedAt: new Date(),
+        updatedAt: now,
         updatedBy: user.displayName,
       },
       $inc: { version: 1 },
@@ -870,6 +918,7 @@ module.exports = {
   updateEntry,
   addReturn,
   assignEntry,
+  assignMany,
   closeEntry,
   reopenEntry,
   deleteEntry,

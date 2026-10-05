@@ -2464,3 +2464,58 @@ textarea {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ Assign: selecting several bills */
+
+.select-col {
+  width: 34px;
+  padding-right: 0 !important;
+}
+.select-box {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+.entry-card .select-box {
+  margin-right: 8px;
+}
+.data-table tbody tr.is-selected td {
+  background: var(--primary-soft);
+}
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: var(--primary-soft);
+  border-bottom: 1px solid var(--primary-line);
+  font-weight: 600;
+}
+.bulk-bar[hidden] {
+  display: none;
+}
+.assign-confirm {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  font-size: 13.5px;
+}
+.assign-list {
+  margin-top: 8px;
+}
+@media (max-width: 720px) {
+  .data-table td.select-col::before {
+    content: none;
+  }
+}
+@media print {
+  .select-col,
+  .select-box,
+  .bulk-bar {
+    display: none !important;
+  }
+}
