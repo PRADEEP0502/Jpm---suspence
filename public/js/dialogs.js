@@ -18,7 +18,7 @@ import {
   showFieldError,
   withBusy,
 } from './lib.js';
-import { state, can, refreshView } from './state.js';
+import { state, can, canAssign, refreshView } from './state.js';
 import { statusBadge, ageBadge } from './ui.js';
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ export async function showEntryDetail(entryOrId) {
         ? html`<button type="button" class="btn" data-act="reopen">Reopen</button>`
         : ''}
       ${can('entries:edit') && live && pending ? html`<button type="button" class="btn" data-act="edit">Edit</button>` : ''}
-      ${can('entries:edit') && live ? html`<button type="button" class="btn" data-act="assign">Assign</button>` : ''}
+      ${live && canAssign(e) ? html`<button type="button" class="btn" data-act="assign">Assign</button>` : ''}
       ${can('entries:return') && live && pending
         ? html`<button type="button" class="btn btn--primary" data-act="return">+ Add Return</button>`
         : ''}
@@ -638,7 +638,7 @@ export async function showAssignDialog(input, onDone = () => {}) {
   const e = list[0];
   let lookups;
   try {
-    lookups = await api('GET', '/api/lookups');
+    lookups = await api('GET', '/api/assignees');
   } catch (err) {
     toast(err.message, 'error');
     return;

@@ -19,6 +19,10 @@ export const can = (permission) =>
   !!state.user && !state.user.mustChangePassword && state.user.permissions.includes(permission);
 
 export const canSeeAll = () => can('entries:viewAll');
+/** Staff may assign any bill; a Money Receiver only a bill they currently hold. */
+export const canAssign = (entry) =>
+  can('entries:edit') ||
+  (can('own:assign') && !!entry.currentHolderUserId && String(entry.currentHolderUserId) === String(state.user.id));
 export const roleLabel = (role) => (state.roles.find((r) => r.key === role) || {}).label || role;
 
 // The router registers a callback that reloads whatever page is on screen,

@@ -9,6 +9,7 @@ const COLUMNS = [
   ['Edit', (p) => (p.includes('entries:edit') ? 'Yes' : 'No')],
   ['Return', (p) => (p.includes('entries:return') ? 'Yes' : 'No')],
   ['Close', (p) => (p.includes('entries:close') ? 'Yes (automatic at zero balance)' : 'No')],
+  ['Assign', (p) => (p.includes('entries:edit') ? 'Yes' : p.includes('own:assign') ? 'Bills they hold' : 'No')],
   ['User Management', (p) => (p.includes('users:manage') ? 'Yes' : 'No')],
 ];
 

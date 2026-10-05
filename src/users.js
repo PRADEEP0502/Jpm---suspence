@@ -104,6 +104,11 @@ async function linkEntriesToUser(user) {
     { whomLower: user.displayNameLower },
     { $set: { givenToUserId: user._id } }
   );
+  // Bills this person currently holds also become visible to them.
+  await db.collections.entries().updateMany(
+    { currentHolderLower: user.displayNameLower },
+    { $set: { currentHolderUserId: user._id } }
+  );
   return result.modifiedCount;
 }
 

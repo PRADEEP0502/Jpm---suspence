@@ -3,8 +3,9 @@ import { state } from '../state.js';
 import { myCards } from '../ui.js';
 import { mountEntryList } from '../entry-list.js';
 
-// A Normal User sees only the money given to them (the server enforces this), view only.
-const MY_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
+// A Money Receiver sees bills given to them and bills they currently hold (the server enforces this).
+// They can only assign the ones they hold; everything else is view only.
+const MY_COLUMNS = ['srn', 'entryDate', 'whom', 'holder', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
 
 export function render(main) {
   setHtml(
@@ -13,8 +14,8 @@ export function render(main) {
         <div>
           <h1 class="page-title">My Suspense</h1>
           <p class="page-sub">
-            Amounts given to <strong>${state.user.displayName}</strong>: what was given, what has been returned and what
-            is still pending. Click a row to see the return history.
+            Bills given to <strong>${state.user.displayName}</strong> or assigned to them. Tick the bills you hold and press
+            Assign to hand them to someone else.
           </p>
         </div>
       </div>
@@ -37,6 +38,7 @@ export function render(main) {
     columns: () => MY_COLUMNS,
     noWhomFilter: true,
     actions: false,
+    ownAssign: true,
   });
 
   // Each card filters the list below to exactly the entries behind its figure.

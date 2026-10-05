@@ -149,6 +149,12 @@ function buildApp() {
 
   api.get('/dashboard', view, ownScopeGuard, wrap((req) => entries.dashboardSummary(req.user)));
   api.get('/lookups', requirePermission('entries:viewAll'), wrap((req) => entries.lookups(req.user)));
+  // Who a bill can be assigned to (name + Employee ID only), for anyone allowed to assign.
+  api.get(
+    '/assignees',
+    requirePermission('entries:edit', 'own:assign'),
+    wrap(async () => ({ employees: await users.employeeNames() }))
+  );
 
   // Suspense entries. Also reachable as /api/suspense.
   const suspense = express.Router();
@@ -181,14 +187,15 @@ function buildApp() {
     requirePermission('entries:return'),
     wrapWrite(async (req) => ({ entry: await entries.addReturn(req.params.id, req.body, req.user) }))
   );
+  // Staff assign any bill; Money Receivers only bills they hold (checked per bill in entries.js).
   suspense.post(
     '/assign',
-    requirePermission('entries:edit'),
+    requirePermission('entries:edit', 'own:assign'),
     wrapWrite(async (req) => entries.assignMany(req.body, req.user))
   );
   suspense.post(
     '/:id/assign',
-    requirePermission('entries:edit'),
+    requirePermission('entries:edit', 'own:assign'),
     wrapWrite(async (req) => ({ entry: await entries.assignEntry(req.params.id, req.body, req.user) }))
   );
   suspense.post(

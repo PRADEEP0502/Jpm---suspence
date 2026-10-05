@@ -1,7 +1,7 @@
 // Reusable entries table with search, status switch, filters, sorting and row actions.
 
 import { html, setHtml, $, $$, api, toQuery, debounce, fmtMoney, fmtDate, fmtDateTime, plural } from './lib.js';
-import { state, can } from './state.js';
+import { state, can, canAssign } from './state.js';
 import { statusBadge, ageBadge } from './ui.js';
 import { showEntryDetail, showEntryForm, showReturnDialog, showAssignDialog, restoreEntry } from './dialogs.js';
 
@@ -207,7 +207,8 @@ export function mountEntryList(container, config) {
   // already about one person (My Suspense, a Holder Summary drill-down).
   const showHolderFilter = !cfg.noWhomFilter && !cfg.fixed.holder;
   // Staff who may assign can tick several bills and assign them in one go.
-  const canSelect = () => cfg.actions && can('entries:edit') && st.status !== 'DELETED';
+  const canSelect = () => st.status !== 'DELETED' && ((cfg.actions && can('entries:edit')) || (cfg.ownAssign && can('own:assign')));
+  const selectableRows = () => rows.filter((r) => canAssign(r));
   const selected = new Set();
   savedStates.set(cfg.id, st);
   if (cfg.statusChoices && !cfg.statusChoices.some(([v]) => v === st.status)) st.status = cfg.defaultStatus;
@@ -440,7 +441,7 @@ export function mountEntryList(container, config) {
     const sorted = sortedRows();
     const selectable = canSelect();
     for (const id of [...selected]) if (!rows.some((r) => String(r.id) === id)) selected.delete(id);
-    const allChecked = selectable && selected.size > 0 && selected.size === rows.length;
+    const allChecked = selectable && selected.size > 0 && selected.size === selectableRows().length;
     const sortable = keys.filter((key) => COLUMNS[key].sort);
     setHtml(
       el('sort'),
@@ -491,7 +492,9 @@ export function mountEntryList(container, config) {
                 data-id="${e.id}"
                 tabindex="0"
               >
-                ${selectable ? html`<td class="select-col">${selectBox(e, selected.has(String(e.id)))}</td>` : ''}
+                ${selectable
+                  ? html`<td class="select-col">${canAssign(e) ? selectBox(e, selected.has(String(e.id))) : ''}</td>`
+                  : ''}
                 ${keys.map(
                   (key) =>
                     html`<td class="${COLUMNS[key].cls || ''}" data-label="${COLUMNS[key].label}">${COLUMNS[key].cell(e)}</td>`
@@ -501,7 +504,9 @@ export function mountEntryList(container, config) {
           </tbody>
         </table>
       </div>
-      <div class="entry-cards">${sorted.map((e) => entryCard(e, keys, selectable, selected.has(String(e.id))))}</div>`
+      <div class="entry-cards">
+        ${sorted.map((e) => entryCard(e, keys, selectable && canAssign(e), selected.has(String(e.id))))}
+      </div>`
     );
     updateBulk();
     el('foot').textContent =
@@ -522,8 +527,9 @@ export function mountEntryList(container, config) {
     });
     const all = $('[data-role="select-all"]', container);
     if (all) {
-      all.checked = n > 0 && n === rows.length;
-      all.indeterminate = n > 0 && n < rows.length;
+      const total = selectableRows().length;
+      all.checked = n > 0 && n === total;
+      all.indeterminate = n > 0 && n < total;
     }
   }
 
@@ -584,7 +590,7 @@ export function mountEntryList(container, config) {
       return;
     }
     if (t.closest('[data-role="select-all"]')) {
-      if (t.checked) rows.forEach((r) => selected.add(String(r.id)));
+      if (t.checked) selectableRows().forEach((r) => selected.add(String(r.id)));
       else selected.clear();
       updateBulk();
       return;

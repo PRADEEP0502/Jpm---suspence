@@ -7,11 +7,13 @@
  * for the signed-in user only to decide which buttons and menus to show; hiding a button is
  * never what protects the data.
  *
- *   Role         Own records   All records   Add   Edit   Return   Close   Users / settings
- *   NORMAL       view          no            no    no     no       no      no
- *   ENTRY        yes           YES           yes   yes    yes      yes     no
- *   ADMIN        yes           YES           yes   yes    yes      yes     yes
- *   MD           yes           YES           yes   yes    yes      yes     yes
+ *   Role         Own records   All records   Add   Edit   Return   Close   Assign      Users / settings
+ *   NORMAL       view          no            no    no     no       no      bills held  no
+ *   ENTRY        yes           YES           yes   yes    yes      yes     any bill    no
+ *   ADMIN        yes           YES           yes   yes    yes      yes     any bill    yes
+ *   MD           yes           YES           yes   yes    yes      yes     any bill    yes
+ *
+ * "Own records" for a Money Receiver means bills given to them AND bills they currently hold.
  *
  * "Close" is not a button of its own: an entry closes automatically the moment its balance
  * reaches zero, so the permission to close is the permission to record a return.
@@ -27,7 +29,8 @@ const ROLE_LABELS = {
 };
 
 const PERMISSIONS = {
-  'own:view': 'View own suspense records',
+  'own:view': 'View own suspense records (given to them or held by them)',
+  'own:assign': 'Assign bills they currently hold to another employee',
   'entries:viewAll': 'View all suspense entries, search, filters, summaries',
   'entries:add': 'Add new suspense entries',
   'entries:edit': 'Edit entries',
@@ -52,7 +55,7 @@ const ENTRY_PERMISSIONS = [
 const FULL_PERMISSIONS = [...ENTRY_PERMISSIONS, ...Object.keys(PERMISSIONS).filter((p) => !ENTRY_PERMISSIONS.includes(p))];
 
 const ROLE_PERMISSIONS = {
-  NORMAL: ['own:view'],
+  NORMAL: ['own:view', 'own:assign'],
   ENTRY: ENTRY_PERMISSIONS,
   ADMIN: FULL_PERMISSIONS,
   MD: FULL_PERMISSIONS,

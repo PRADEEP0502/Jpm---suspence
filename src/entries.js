@@ -50,15 +50,24 @@ const LIST_STATUSES = ['PENDING', 'OPEN', 'PARTIAL', 'CLOSED', 'ALL', 'DELETED']
 // Who may see what
 // ---------------------------------------------------------------------------
 
-/** Database filter that limits a query to the records this user is allowed to see. */
+/**
+ * Database filter that limits a query to the records this user is allowed to see.
+ * A Money Receiver sees bills given to them and bills currently assigned to them. It is wrapped in
+ * $and so callers that add their own $or (the search box) can never replace it.
+ */
 function scopeFilter(user) {
   if (permissions.can(user, 'entries:viewAll')) return {};
   if (permissions.can(user, 'own:view')) {
     const id = db.toObjectId(user.id);
-    if (id) return { givenToUserId: id };
+    if (id) return { $and: [{ $or: [{ givenToUserId: id }, { currentHolderUserId: id }] }] };
   }
   throw new HttpError(403, 'You do not have permission to view suspense records.', { code: 'FORBIDDEN' });
 }
+
+/** Staff may assign any bill; a Money Receiver only bills they currently hold. */
+const mayAssign = (doc, user) =>
+  permissions.can(user, 'entries:edit') ||
+  (permissions.can(user, 'own:assign') && !!doc.currentHolderUserId && String(doc.currentHolderUserId) === String(user.id));
 
 const canSeeDeleted = (user) => permissions.can(user, 'entries:delete');
 
@@ -700,6 +709,9 @@ const alreadyWith = (doc, target) => target.displayName.toLowerCase() === String
 
 async function assignEntry(id, body, user) {
   const doc = await requireActiveDoc(id);
+  if (!mayAssign(doc, user)) {
+    throw new HttpError(403, 'You can only assign bills you currently hold.', { code: 'FORBIDDEN' });
+  }
   checkVersion(doc, body.version);
   const { target, remark } = await validateAssignInput(body);
   if (alreadyWith(doc, target)) throw new HttpError(400, `${holderOf(doc)} already holds this.`, { field: 'to' });
@@ -723,6 +735,10 @@ async function assignMany(body, user) {
     const doc = await findDoc(id);
     if (!doc || doc.isDeleted) {
       skipped.push({ id, reason: 'not found' });
+      continue;
+    }
+    if (!mayAssign(doc, user)) {
+      skipped.push({ id, reason: 'not held by you' });
       continue;
     }
     if (alreadyWith(doc, target)) {

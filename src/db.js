@@ -182,6 +182,20 @@ async function upgradeEntriesForAssignment() {
   await collections.entries().updateMany({ currentHolderLower: { $exists: false } }, [
     { $set: { currentHolderLower: { $toLower: '$currentHolder' } } },
   ]);
+
+  // Link each holder to their login, so the bill shows in that person's own account. Bills whose
+  // holder had no login at the time (or got one later) are picked up here on every start.
+  const unlinked = await collections.entries().find({ currentHolderUserId: null }).project({ currentHolderLower: 1 }).toArray();
+  if (unlinked.length) {
+    const byName = new Map();
+    for (const u of await collections.users().find({}).project({ displayNameLower: 1 }).toArray()) {
+      byName.set(u.displayNameLower, u._id);
+    }
+    for (const e of unlinked) {
+      const userId = byName.get(e.currentHolderLower);
+      if (userId) await collections.entries().updateOne({ _id: e._id }, { $set: { currentHolderUserId: userId } });
+    }
+  }
 }
 
 async function ensureIndexes() {
@@ -194,6 +208,7 @@ async function ensureIndexes() {
     { key: { currentHolderLower: 1 }, name: 'current_holder' },
     { key: { particularsLower: 1 }, name: 'particulars' },
     { key: { givenToUserId: 1, isDeleted: 1 }, name: 'given_to_user' },
+    { key: { currentHolderUserId: 1, isDeleted: 1 }, name: 'current_holder_user' },
   ]);
   await collections.users().createIndexes([{ key: { usernameLower: 1 }, unique: true, name: 'username_unique' }]);
   try {
