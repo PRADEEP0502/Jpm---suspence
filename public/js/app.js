@@ -75,9 +75,19 @@ function periodLabel() {
   >`;
 }
 
+// Phones: the menu sits behind a ☰ button and opens as a list under the header.
+function setMenuOpen(open) {
+  document.body.classList.toggle('nav-open', open);
+  const btn = $('#menuToggle');
+  btn.setAttribute('aria-expanded', String(open));
+  btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+}
+
 function renderHeader() {
   setHtml($('#asOf'), periodLabel());
   const u = state.user;
+  $('#menuToggle').hidden = !u;
+  setMenuOpen(false);
   setHtml(
     $('#userArea'),
     u
@@ -282,6 +292,18 @@ async function start() {
         },
       });
     }
+  });
+
+  $('#menuToggle').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    setMenuOpen(!document.body.classList.contains('nav-open'));
+  });
+  // Close it again when a page is chosen, when tapping elsewhere, or with Escape.
+  document.addEventListener('click', (ev) => {
+    if (document.body.classList.contains('nav-open') && !ev.target.closest('#nav, #menuToggle')) setMenuOpen(false);
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && document.body.classList.contains('nav-open')) setMenuOpen(false);
   });
 
   window.addEventListener('hashchange', route);

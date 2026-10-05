@@ -1829,33 +1829,44 @@ textarea {
     padding: 0 12px;
   }
 
-  /* Menu: all tabs visible as a grid of buttons instead of a hidden side-scroll. */
+  /* Menu: hidden behind the ☰ button; opens as a list under the header. */
+  .menu-toggle:not([hidden]) {
+    display: inline-flex;
+  }
+  .brand {
+    flex: 1 1 0;
+  }
   .nav {
-    position: static;
+    display: none;
+    position: sticky;
+    top: 0;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  }
+  body.nav-open .nav {
+    display: block;
   }
   .nav-inner {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 8px 12px;
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 0;
     overflow: visible;
   }
   .nav-link {
-    flex: 1 1 auto;
     display: flex;
     align-items: center;
-    justify-content: center;
-    min-height: 40px;
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 13.5px;
-    text-align: center;
+    min-height: 46px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--row-border);
+    border-left: 3px solid transparent;
+    font-size: 14.5px;
     white-space: normal;
-    line-height: 1.2;
+  }
+  .nav-link:last-child {
+    border-bottom: 0;
   }
   .nav-link.is-active {
-    border-color: var(--primary);
+    border-bottom-color: var(--row-border);
+    border-left-color: var(--primary);
     background: var(--primary-soft);
   }
 
@@ -2215,13 +2226,6 @@ textarea {
   .show-xs {
     display: inline;
   }
-  .nav-inner {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .nav-link:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
   .filters {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2516,6 +2520,48 @@ textarea {
   .select-col,
   .select-box,
   .bulk-bar {
+    display: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ Phone menu button (☰) */
+
+.menu-toggle {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+.menu-toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: #fff;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+body.nav-open .menu-toggle span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+body.nav-open .menu-toggle span:nth-child(2) {
+  opacity: 0;
+}
+body.nav-open .menu-toggle span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+@media print {
+  .menu-toggle {
     display: none !important;
   }
 }
