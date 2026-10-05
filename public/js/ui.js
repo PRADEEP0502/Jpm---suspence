@@ -58,20 +58,13 @@ export function summaryCards(c) {
 
 /** A Normal User's own figures. Clicking a card filters their own entry list below (same page, no navigation). */
 export function myCards(c) {
-  return html`<div class="cards cards--four" data-role="kpi-cards">
+  return html`<div class="cards" data-role="kpi-cards">
     ${card(
       'Balance Pending',
       fmtMoney(c.totalBalancePaise),
       `Still to be returned · ${entriesWord(c.pendingCount)}`,
       'open',
       'PENDING'
-    )}
-    ${card(
-      'Returned So Far',
-      fmtMoney(c.totalReturnedPaise),
-      `Of ${fmtMoney(c.totalOriginalPaise)} originally given`,
-      'closed',
-      'ALL'
     )}
     ${card('Open Entries', c.openCount, c.openCount ? 'Nothing returned yet' : 'None', '', 'OPEN')}
     ${card('Partially Settled', c.partialCount, c.partialCount ? 'Part returned, balance pending' : 'None', '', 'PARTIAL')}
