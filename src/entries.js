@@ -280,7 +280,7 @@ async function dashboardSummary(user) {
     totalReturnedPaise: 0,
     totalBalancePaise: 0,
     openCount: 0, // OPEN ENTRIES
-    openAmountPaise: 0, // OPEN AMOUNT: balance of entries with nothing returned yet
+    openAmountPaise: 0, // PENDING AMOUNT (card label): balance of entries with nothing returned yet
     partialCount: 0, // PARTIALLY SETTLED ENTRIES
     partialAmountPaise: 0, // PARTIALLY SETTLED AMOUNT: balance still pending on them
     partialOriginalPaise: 0,
