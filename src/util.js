@@ -16,9 +16,9 @@ const MAX_AMOUNT_PAISE = 10_000_000_000;
 // JPM DFR-style aging categories (day ranges confirmed by JPM): the one definition used by the
 // dashboard tiles, filters, each entry's age badge and the aging report. Every age falls in exactly one.
 const AGE_BUCKETS = [
-  { key: 'A-3', label: 'A-3', range: '0–3 Days', min: 0, max: 3, level: 'normal', levelLabel: 'A-3' },
-  { key: 'A-5', label: 'A-5', range: '4–5 Days', min: 4, max: 5, level: 'attention', levelLabel: 'A-5' },
-  { key: 'A-10', label: 'A-10', range: '6–59 Days', min: 6, max: 59, level: 'warning', levelLabel: 'A-10' },
+  { key: 'A-3', label: 'A-3', range: '0–4 Days', min: 0, max: 4, level: 'normal', levelLabel: 'A-3' },
+  { key: 'A-5', label: 'A-5', range: '5–9 Days', min: 5, max: 9, level: 'attention', levelLabel: 'A-5' },
+  { key: 'A-10', label: 'A-10', range: '10–59 Days', min: 10, max: 59, level: 'warning', levelLabel: 'A-10' },
   { key: 'A-60+', label: 'A-60+', range: '60 Days and above', min: 60, max: null, level: 'very-critical', levelLabel: 'A-60+' },
 ];
 
