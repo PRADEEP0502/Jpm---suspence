@@ -29,7 +29,12 @@ export function render(main) {
               ${row('Today', fmtDate(s.today))}
               ${row('Entries', s.entries)}
               ${row('Screens open now', s.liveScreens)}
-              ${row('Sign-in lasts', `${s.sessionHours} hours`)}
+              ${row(
+                'Sign-in lasts',
+                s.sessionHours >= 48
+                  ? `${Math.round(s.sessionHours / 24)} days (renews each day the app is used)`
+                  : `${s.sessionHours} hours`
+              )}
               ${row('Server started', fmtDateTime(s.startedAt))}
               ${row('Version', s.version)}
             </dl>

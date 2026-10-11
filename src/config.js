@@ -49,7 +49,8 @@ module.exports = {
   SEED_SAMPLE_DATA: flag('SEED_SAMPLE_DATA', 'true'),
   ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'Admin@123',
-  SESSION_HOURS: Number(process.env.SESSION_HOURS) || 12,
+  // How long a sign-in lasts without using the app. It renews itself on use (see auth.loadUser).
+  SESSION_HOURS: Number(process.env.SESSION_HOURS) || 24 * 30,
   COOKIE_SECURE: String(process.env.COOKIE_SECURE || (ON_HOSTED_PLATFORM ? 'true' : 'false')).toLowerCase() === 'true',
   // Behind a proxy the real visitor IP comes from X-Forwarded-For; needed for login rate limiting.
   TRUST_PROXY: process.env.TRUST_PROXY || (ON_HOSTED_PLATFORM ? 1 : 'loopback'),

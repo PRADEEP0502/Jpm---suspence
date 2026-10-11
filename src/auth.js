@@ -179,15 +179,29 @@ async function changePassword(req, currentPassword, newPassword) {
 // Middleware
 // ---------------------------------------------------------------------------
 
-async function loadUser(req, _res, next) {
+const RENEW_AFTER_MS = 24 * 3600 * 1000; // extend a sign-in at most once a day
+
+async function loadUser(req, res, next) {
   req.user = null;
   try {
     const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
     if (token) {
-      const session = await db.collections.sessions().findOne({ _id: sha256(token), expiresAt: { $gt: new Date() } });
+      const now = new Date();
+      const session = await db.collections.sessions().findOne({ _id: sha256(token), expiresAt: { $gt: now } });
       if (session) {
         const user = await db.collections.users().findOne({ _id: session.userId, isActive: true });
-        if (user) req.user = toPublicUser(user);
+        if (user) {
+          req.user = toPublicUser(user);
+          // Keep people who use the app signed in: push the expiry out again, once a day at most.
+          const fullLife = SESSION_HOURS * 3600 * 1000;
+          if (session.expiresAt.getTime() - now.getTime() < fullLife - RENEW_AFTER_MS) {
+            await db.collections.sessions().updateOne(
+              { _id: session._id },
+              { $set: { expiresAt: new Date(now.getTime() + fullLife), renewedAt: now } }
+            );
+            setSessionCookie(res, token, SESSION_HOURS * 3600);
+          }
+        }
       }
     }
     next();
