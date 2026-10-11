@@ -2572,3 +2572,9 @@ body.nav-open .menu-toggle span:nth-child(3) {
   max-width: 420px;
   flex: 1 1 260px;
 }
+.category-note {
+  padding: 9px 18px;
+  background: var(--primary-soft);
+  border-bottom: 1px solid var(--primary-line);
+  font-size: 13.5px;
+}

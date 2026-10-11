@@ -299,6 +299,8 @@ async function dashboardSummary(user) {
     pendingCount: 0,
     closedCount: 0,
     oldestPendingDays: null,
+    // Pending balance split by aging category (A-3, A-5, A-10, A-60+), same rules as the dashboard tiles.
+    aging: Object.fromEntries(AGE_BUCKETS.map((b) => [b.key, { count: 0, amountPaise: 0, oldestDays: null }])),
   });
   const holders = new Map();
   const particulars = new Map();
@@ -343,6 +345,10 @@ async function dashboardSummary(user) {
       if (pending) {
         g.pendingCount += 1;
         g.oldestPendingDays = Math.max(g.oldestPendingDays ?? 0, e.ageDays);
+        const slot = g.aging[e.ageBucket];
+        slot.count += 1;
+        slot.amountPaise += e.balancePaise;
+        slot.oldestDays = Math.max(slot.oldestDays ?? 0, e.ageDays);
       } else {
         g.closedCount += 1;
       }

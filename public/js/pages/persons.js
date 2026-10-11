@@ -13,15 +13,25 @@ const DETAIL_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'returned',
 // Search / filters / sort survive going to a holder's details and back.
 const view = { q: '', status: 'ALL', age: '', sort: { key: 'balance', dir: 'desc' } };
 
+/**
+ * A holder's figures as shown in the table. With an aging category chosen (e.g. A-10) these are that
+ * category's balance / pending count / oldest age only; otherwise the holder's totals.
+ */
+function figures(h) {
+  const slot = view.age && h.aging ? h.aging[view.age] : null;
+  if (slot) return { balance: slot.amountPaise, pending: slot.count, age: slot.oldestDays };
+  return { balance: h.balanceAmountPaise, pending: h.pendingCount, age: h.oldestPendingDays };
+}
+
 const SORTS = {
   name: (h) => h.name.toLowerCase(),
   entries: (h) => h.totalCount,
-  balance: (h) => h.balanceAmountPaise,
-  pending: (h) => h.pendingCount,
-  age: (h) => (h.pendingCount ? h.oldestPendingDays : -1),
+  balance: (h) => figures(h).balance,
+  pending: (h) => figures(h).pending,
+  age: (h) => (figures(h).pending ? figures(h).age : -1),
 };
 
-const isClear = (h) => !h.balanceAmountPaise;
+const isClear = (h) => !figures(h).balance;
 const statusBadge = (h) =>
   isClear(h) ? html`<span class="badge badge--closed">Clear</span>` : html`<span class="badge badge--partial">Pending</span>`;
 const holderHref = (name) => `#/persons/${encodeURIComponent(name)}`;
@@ -85,11 +95,8 @@ function renderList(main) {
       if (term && !h.name.toLowerCase().includes(term)) return false;
       if (view.status === 'PENDING' && isClear(h)) return false;
       if (view.status === 'CLEAR' && !isClear(h)) return false;
-      if (bucket) {
-        if (!h.pendingCount) return false;
-        const d = h.oldestPendingDays;
-        if (d < bucket.min || (bucket.max !== null && d > bucket.max)) return false;
-      }
+      // A category shows everyone who has at least one pending entry in it.
+      if (bucket && !figures(h).pending) return false;
       return true;
     });
     const { key, dir } = view.sort;
@@ -114,15 +121,24 @@ function renderList(main) {
   }
 
   function renderTotals() {
-    const balance = holders.reduce((s, h) => s + h.balanceAmountPaise, 0);
-    const pending = holders.reduce((s, h) => s + h.pendingCount, 0);
+    const balance = holders.reduce((s, h) => s + figures(h).balance, 0);
+    const pending = holders.reduce((s, h) => s + figures(h).pending, 0);
+    const cat = view.age;
     setHtml(
       $('[data-role="totals"]', main),
-      statStrip([
-        ['Total Holders', holders.length],
-        ['Total Balance', fmtMoney(balance)],
-        ['Total Pending', pending],
-      ])
+      statStrip(
+        cat
+          ? [
+              [`Holders with ${cat}`, holders.filter((h) => figures(h).pending).length],
+              [`${cat} Balance`, fmtMoney(balance)],
+              [`${cat} Pending`, pending],
+            ]
+          : [
+              ['Total Holders', holders.length],
+              ['Total Balance', fmtMoney(balance)],
+              ['Total Pending', pending],
+            ]
+      )
     );
   }
 
@@ -137,36 +153,46 @@ function renderList(main) {
       setHtml(box, html`<div class="empty">No holders found.</div>`);
       return;
     }
+    const cat = view.age; // e.g. 'A-10': figures below are for that category only
+    const bucket = state.ageBuckets.find((b) => b.key === cat);
     setHtml(
       box,
-      html`<div class="table-wrap">
+      html`${cat
+          ? html`<div class="category-note">
+              Showing only <strong>${cat}</strong> (${bucket ? bucket.range : ''}): each person's ${cat} balance and
+              pending entries.
+            </div>`
+          : ''}
+        <div class="table-wrap">
         <table class="data-table holder-table">
           <thead>
             <tr>
-              ${th('name', 'Holder')} ${th('entries', 'Entries', 'num')} ${th('balance', 'Balance', 'num')}
-              ${th('pending', 'Pending', 'num')} ${th('age', 'Age', 'num')}
+              ${th('name', 'Holder')} ${cat ? '' : th('entries', 'Entries', 'num')}
+              ${th('balance', cat ? `${cat} Balance` : 'Balance', 'num')}
+              ${th('pending', cat ? `${cat} Pending` : 'Pending', 'num')} ${th('age', 'Age', 'num')}
               <th scope="col">Status</th>
               <th scope="col" class="actions">Action</th>
             </tr>
           </thead>
           <tbody>
-            ${rows.map(
-              (h) => html`<tr class="is-clickable" data-href="${holderHref(h.name)}" tabindex="0">
+            ${rows.map((h) => {
+              const f = figures(h);
+              return html`<tr class="is-clickable" data-href="${holderHref(h.name)}" tabindex="0">
                 <td data-label="Holder"><a class="row-link" href="${holderHref(h.name)}">${h.name}</a></td>
-                <td data-label="Entries" class="num">${h.totalCount}</td>
+                ${cat ? '' : html`<td data-label="Entries" class="num">${h.totalCount}</td>`}
                 <td data-label="Balance" class="num">
-                  ${h.balanceAmountPaise
-                    ? html`<span class="balance-amount">${fmtMoney(h.balanceAmountPaise)}</span>`
+                  ${f.balance
+                    ? html`<span class="balance-amount">${fmtMoney(f.balance)}</span>`
                     : html`<span class="muted">${fmtMoney(0)}</span>`}
                 </td>
-                <td data-label="Pending" class="num ${h.pendingCount ? 'strong' : 'muted'}">${h.pendingCount}</td>
-                <td data-label="Age" class="num nowrap ${h.pendingCount ? '' : 'muted'}">
-                  ${h.pendingCount ? fmtDays(h.oldestPendingDays) : '—'}
+                <td data-label="Pending" class="num ${f.pending ? 'strong' : 'muted'}">${f.pending}</td>
+                <td data-label="Age" class="num nowrap ${f.pending ? '' : 'muted'}">
+                  ${f.pending ? fmtDays(f.age) : '—'}
                 </td>
                 <td data-label="Status">${statusBadge(h)}</td>
                 <td class="actions"><a class="btn btn--sm" href="${holderHref(h.name)}">View</a></td>
-              </tr>`
-            )}
+              </tr>`;
+            })}
           </tbody>
         </table>
       </div>`
@@ -194,7 +220,10 @@ function renderList(main) {
   });
   ageSel.addEventListener('change', () => {
     view.age = ageSel.value;
-    if (holders) renderTable();
+    if (holders) {
+      renderTotals();
+      renderTable();
+    }
   });
   $('[data-role="table"]', main).addEventListener('click', (ev) => {
     const sortBtn = ev.target.closest('[data-sort]');
@@ -239,8 +268,9 @@ function renderDetail(main, name) {
 
   const list = mountEntryList($('[data-role="entries"]', main), {
     id: `holder:${name.toLowerCase()}`,
-    title: (status) =>
-      ({ ALL: 'All Entries', OPEN: 'Open Entries', PARTIAL: 'Partially Settled Entries', CLOSED: 'Closed Entries' })[status],
+    title: (status, st) =>
+      ({ ALL: 'All Entries', OPEN: 'Open Entries', PARTIAL: 'Partially Settled Entries', CLOSED: 'Closed Entries' })[status] +
+      (st.age ? ` — ${st.age}` : ''),
     statusChoices: [
       ['ALL', 'All'],
       ['OPEN', 'Open'],
@@ -252,6 +282,9 @@ function renderDetail(main, name) {
     fixed: { holder: name },
     actions: true,
   });
+  // Coming from a category view (e.g. A-10): open this person's entries in that category only.
+  // "Clear filters" on the list shows all of their entries again.
+  if (view.age) list.setFilters({ status: 'ALL', age: view.age });
 
   async function loadTotals() {
     try {
@@ -265,6 +298,9 @@ function renderDetail(main, name) {
               ['Balance', fmtMoney(h.balanceAmountPaise)],
               ['Pending', h.pendingCount],
               ['Oldest Pending', h.pendingCount ? fmtDays(h.oldestPendingDays) : '—'],
+              ...(view.age && h.aging && h.aging[view.age]
+                ? [[`${view.age} Balance`, fmtMoney(h.aging[view.age].amountPaise)]]
+                : []),
             ])
           : html`<div class="empty">No entries are currently held by ${name}.</div>`
       );
