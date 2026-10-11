@@ -1046,77 +1046,108 @@ textarea {
   gap: 12px;
 }
 .aging-tile {
+  --lvl-color: #3f8f5a;
+  --lvl-bg: #e6f3ea;
+  --lvl-fg: #256b3f;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 12px 14px;
+  align-items: stretch;
+  gap: 0;
+  padding: 14px 16px 12px;
   border: 1px solid var(--border);
-  border-top: 3px solid var(--lvl-color, var(--lvl-normal-dot));
+  border-left: 4px solid var(--lvl-color);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow);
   text-align: left;
   cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
 }
-.aging-tile:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
+.aging-tile:hover,
+.aging-tile:focus-visible {
+  border-color: var(--lvl-color);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
 }
 .aging-tile--attention {
   --lvl-color: var(--lvl-attention-dot);
+  --lvl-bg: var(--lvl-attention-bg);
+  --lvl-fg: var(--lvl-attention-fg);
 }
 .aging-tile--warning {
   --lvl-color: var(--lvl-warning-dot);
+  --lvl-bg: var(--lvl-warning-bg);
+  --lvl-fg: var(--lvl-warning-fg);
 }
 .aging-tile--critical {
   --lvl-color: var(--lvl-critical-dot);
+  --lvl-bg: var(--lvl-critical-bg);
+  --lvl-fg: var(--lvl-critical-fg);
 }
 .aging-tile--very-critical {
   --lvl-color: var(--lvl-vcritical-bg);
+  --lvl-bg: var(--lvl-critical-bg);
+  --lvl-fg: var(--lvl-critical-fg);
 }
-.aging-tile.is-empty .aging-amount,
-.aging-tile.is-empty .aging-count {
+.aging-tile.is-empty .aging-amount {
   color: var(--muted);
 }
+.aging-head,
+.aging-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* Category name as a small coloured chip. */
 .aging-range {
-  font-weight: 600;
-  font-size: 14px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--lvl-bg);
+  color: var(--lvl-fg);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
 }
 .level {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--muted);
+  white-space: nowrap;
 }
 .aging-amount {
-  margin-top: 8px;
-  font-size: 20px;
-  font-weight: 600;
-}
-.aging-count {
-  font-size: 13px;
-  color: var(--text-2);
+  margin-top: 12px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 .meter {
   display: block;
   width: 100%;
   height: 6px;
-  margin-top: 10px;
+  margin: 10px 0 8px;
   border-radius: 3px;
-  background: #e6eaef;
+  background: #e9edf2;
   overflow: hidden;
 }
 .meter span {
   display: block;
   height: 100%;
-  background: var(--primary);
+  background: var(--lvl-color, var(--primary));
   border-radius: 3px;
+}
+.aging-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 .aging-share {
   font-size: 12px;
   color: var(--muted);
-  margin-top: 4px;
+  text-align: right;
 }
 
 /* ------------------------------------------------------------------ Person summary */
@@ -2168,45 +2199,13 @@ textarea {
     overflow-wrap: normal;
   }
 
+  /* Aging cards: same layout as desktop, a little tighter. */
   .aging-tile {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'range amount'
-      'level count'
-      'meter meter';
-    align-items: center;
-    column-gap: 12px;
-    row-gap: 2px;
-    padding: 10px 14px;
-    border-top-width: 1px;
-    border-top-color: var(--border);
-    border-left: 4px solid var(--lvl-color, var(--lvl-normal-dot));
-  }
-  .aging-range {
-    grid-area: range;
-  }
-  .aging-tile .level {
-    grid-area: level;
+    padding: 12px 14px 10px;
   }
   .aging-amount {
-    grid-area: amount;
-    margin: 0;
-    font-size: 17px;
-    text-align: right;
-    white-space: nowrap;
-  }
-  .aging-count {
-    grid-area: count;
-    font-size: 12.5px;
-    text-align: right;
-  }
-  .meter {
-    grid-area: meter;
-    margin-top: 6px;
-  }
-  .aging-share {
-    display: none;
+    margin-top: 8px;
+    font-size: 20px;
   }
 
   .detail-grid,

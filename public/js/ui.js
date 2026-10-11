@@ -139,12 +139,16 @@ export function agingTiles(aging) {
         data-age="${a.key}"
         title="Show pending entries in ${a.label} (${a.range})"
       >
-        <span class="aging-range">${a.label}</span>
-        <span class="level level--${a.level}"><span class="age-dot" aria-hidden="true"></span>${a.range}</span>
+        <span class="aging-head">
+          <span class="aging-range">${a.label}</span>
+          <span class="level">${a.range}</span>
+        </span>
         <span class="aging-amount">${fmtMoney(a.amountPaise)}</span>
-        <span class="aging-count">${plural(a.count, 'entry', 'entries')}</span>
         <span class="meter" aria-hidden="true"><span style="width:${a.amountPaise ? Math.max(exact, 1) : 0}%"></span></span>
-        <span class="aging-share">${pctLabel}% of pending balance</span>
+        <span class="aging-foot">
+          <span class="aging-count">${plural(a.count, 'entry', 'entries')}</span>
+          <span class="aging-share">${pctLabel}% of pending balance</span>
+        </span>
       </button>`;
     })}
   </div>`;
