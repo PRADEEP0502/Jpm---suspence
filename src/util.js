@@ -13,12 +13,13 @@ const TIMEZONE = config.TIMEZONE;
 // Upper bound per entry: Rs 10 crore. Guards against typos like an extra zero run.
 const MAX_AMOUNT_PAISE = 10_000_000_000;
 
+// JPM DFR-style aging categories (day ranges confirmed by JPM): the one definition used by the
+// dashboard tiles, filters, each entry's age badge and the aging report. Every age falls in exactly one.
 const AGE_BUCKETS = [
-  { key: '0-7', label: '0–7 Days', min: 0, max: 7, level: 'normal', levelLabel: 'Normal' },
-  { key: '8-15', label: '8–15 Days', min: 8, max: 15, level: 'attention', levelLabel: 'Attention' },
-  { key: '16-30', label: '16–30 Days', min: 16, max: 30, level: 'warning', levelLabel: 'Warning' },
-  { key: '31-60', label: '31–60 Days', min: 31, max: 60, level: 'critical', levelLabel: 'Critical' },
-  { key: '60+', label: '60+ Days', min: 61, max: null, level: 'very-critical', levelLabel: 'Very Critical' },
+  { key: 'A-3', label: 'A-3', range: '0–3 Days', min: 0, max: 3, level: 'normal', levelLabel: 'A-3' },
+  { key: 'A-5', label: 'A-5', range: '4–5 Days', min: 4, max: 5, level: 'attention', levelLabel: 'A-5' },
+  { key: 'A-10', label: 'A-10', range: '6–59 Days', min: 6, max: 59, level: 'warning', levelLabel: 'A-10' },
+  { key: 'A-60+', label: 'A-60+', range: '60 Days and above', min: 60, max: null, level: 'very-critical', levelLabel: 'A-60+' },
 ];
 
 const DEFAULT_PARTICULARS = [

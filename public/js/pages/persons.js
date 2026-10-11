@@ -64,7 +64,7 @@ function renderList(main) {
           </select>
           <select class="holder-filter" data-role="age" aria-label="Age">
             <option value="">All ages</option>
-            ${state.ageBuckets.map((b) => html`<option value="${b.key}">${b.label}</option>`)}
+            ${state.ageBuckets.map((b) => html`<option value="${b.key}">${b.label} (${b.range})</option>`)}
           </select>
         </div>
         <div data-role="table"><div class="empty">Loading…</div></div>

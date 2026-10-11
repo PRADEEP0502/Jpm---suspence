@@ -59,8 +59,8 @@ const REPORTS = {
   async aging(user) {
     const { aging } = await entries.dashboardSummary(user);
     return toCsv([
-      ['Age Group', 'Level', 'Entries', 'Balance Amount'],
-      ...aging.map((a) => [a.label, a.levelLabel, a.count, rupees(a.amountPaise)]),
+      ['Aging Category', 'Days', 'Entries', 'Balance Amount'],
+      ...aging.map((a) => [a.label, a.range, a.count, rupees(a.amountPaise)]),
     ]);
   },
 };

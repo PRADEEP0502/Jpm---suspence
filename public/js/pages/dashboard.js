@@ -6,6 +6,8 @@ import { mountEntryList } from '../entry-list.js';
 // Column sets shared by the other pages.
 export const PENDING_COLUMNS = ['srn', 'entryDate', 'holder', 'particulars', 'amount', 'returned', 'balance', 'age', 'status'];
 export const ALL_COLUMNS = PENDING_COLUMNS;
+// The list behind an aging category shows both who it was given to and who holds it now.
+const AGING_COLUMNS = ['srn', 'entryDate', 'whom', 'particulars', 'amount', 'returned', 'balance', 'age', 'currentHolder', 'status'];
 // A closed entry has been returned in full: Balance is zero and the age is the final one.
 export const CLOSED_COLUMNS = [
   'srn',
@@ -37,7 +39,7 @@ export function render(main) {
         <div class="panel-head">
           <div>
             <h2 class="panel-title">Aging Summary</h2>
-            <div class="panel-sub">Balance still pending, grouped by days pending. Click a group to list those entries.</div>
+            <div class="panel-sub">Pending balance by aging category. Click a category to list its entries.</div>
           </div>
         </div>
         <div class="panel-body" data-role="aging"></div>
@@ -72,9 +74,9 @@ export function render(main) {
   const listEl = $('[data-role="list"]', main);
   const list = mountEntryList(listEl, {
     id: 'dashboard',
-    title: () => 'Pending Suspense',
+    title: (_status, st) => (st.age ? `Pending Suspense — ${st.age}` : 'Pending Suspense'),
     defaultStatus: 'PENDING',
-    columns: () => PENDING_COLUMNS,
+    columns: (_status, st) => (st.age ? AGING_COLUMNS : PENDING_COLUMNS),
     actions: true,
   });
 

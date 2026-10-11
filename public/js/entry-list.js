@@ -220,7 +220,7 @@ export function mountEntryList(container, config) {
 
   // The Action column appears wherever staff work with entries (View, plus Edit / Add Return if allowed).
   const showActions = () => cfg.actions && can('entries:viewAll');
-  const columnKeys = () => [...cfg.columns(st.status), ...(showActions() ? ['actions'] : [])];
+  const columnKeys = () => [...cfg.columns(st.status, st), ...(showActions() ? ['actions'] : [])];
   const defaultSort = () => {
     if (cfg.defaultSort) return cfg.defaultSort(st.status);
     if (['OPEN', 'PARTIAL', 'PENDING'].includes(st.status)) return { key: 'age', dir: 'desc' };
@@ -295,7 +295,7 @@ export function mountEntryList(container, config) {
           <label for="${cfg.id}-age">Age</label>
           <select id="${cfg.id}-age" data-f="age">
             <option value="">Any age</option>
-            ${state.ageBuckets.map((b) => html`<option value="${b.key}">${b.label} (${b.levelLabel})</option>`)}
+            ${state.ageBuckets.map((b) => html`<option value="${b.key}">${b.label} (${b.range})</option>`)}
           </select>
         </div>
         <div class="field">
@@ -330,7 +330,7 @@ export function mountEntryList(container, config) {
     });
     $$('[data-status]', container).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.status === st.status)));
 
-    const title = cfg.title ? cfg.title(st.status) : STATUS_TITLES[st.status];
+    const title = cfg.title ? cfg.title(st.status, st) : STATUS_TITLES[st.status];
     el('title').textContent = title;
 
     const closedDates = cfg.dateField(st.status) === 'closed';

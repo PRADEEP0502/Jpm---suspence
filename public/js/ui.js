@@ -11,7 +11,7 @@ export function statusBadge(entry) {
     : html`<span class="badge badge--closed">Closed</span>`;
 }
 
-const bucketLabel = (key) => (state.ageBuckets.find((b) => b.key === key) || {}).label || '';
+const bucketRange = (key) => (state.ageBuckets.find((b) => b.key === key) || {}).range || '';
 
 /** Age pill. Open entries carry an aging level (dot + tint); closed entries show days pending, neutral. */
 export function ageBadge(entry, { withLevel = false } = {}) {
@@ -20,7 +20,7 @@ export function ageBadge(entry, { withLevel = false } = {}) {
       >${fmtDays(entry.ageDays)}</span
     >`;
   }
-  return html`<span class="age age--${entry.ageLevel}" title="${entry.ageLevelLabel} (${bucketLabel(entry.ageBucket)})"
+  return html`<span class="age age--${entry.ageLevel}" title="${entry.ageLevelLabel} (${bucketRange(entry.ageBucket)})"
     ><span class="age-dot" aria-hidden="true"></span>${fmtDays(entry.ageDays)}${withLevel
       ? html`<span class="age-level">${entry.ageLevelLabel}</span>`
       : html`<span class="sr-only">, ${entry.ageLevelLabel}</span>`}</span
@@ -125,7 +125,7 @@ export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
   </div>`;
 }
 
-/** Five aging tiles for open entries; each is a button that filters the open table. */
+/** Four aging tiles (A-3, A-5, A-10, A-60+) for pending entries; each is a button that lists its entries. */
 export function agingTiles(aging) {
   const openTotal = aging.reduce((s, a) => s + a.amountPaise, 0);
   return html`<div class="aging">
@@ -137,10 +137,10 @@ export function agingTiles(aging) {
         type="button"
         class="aging-tile aging-tile--${a.level} ${a.count ? '' : 'is-empty'}"
         data-age="${a.key}"
-        title="Show open entries aged ${a.label}"
+        title="Show pending entries in ${a.label} (${a.range})"
       >
         <span class="aging-range">${a.label}</span>
-        <span class="level level--${a.level}"><span class="age-dot" aria-hidden="true"></span>${a.levelLabel}</span>
+        <span class="level level--${a.level}"><span class="age-dot" aria-hidden="true"></span>${a.range}</span>
         <span class="aging-amount">${fmtMoney(a.amountPaise)}</span>
         <span class="aging-count">${plural(a.count, 'entry', 'entries')}</span>
         <span class="meter" aria-hidden="true"><span style="width:${a.amountPaise ? Math.max(exact, 1) : 0}%"></span></span>
