@@ -2578,3 +2578,75 @@ body.nav-open .menu-toggle span:nth-child(3) {
   border-bottom: 1px solid var(--primary-line);
   font-size: 13.5px;
 }
+
+/* ------------------------------------------------------------------ Tablets: entries stay a table (list view) */
+
+@media (min-width: 721px) and (max-width: 1100px) {
+  .entry-list .data-table {
+    font-size: 13px;
+  }
+  .entry-list .data-table th,
+  .entry-list .data-table td {
+    padding: 8px 6px;
+  }
+  .entry-list .data-table thead th {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+  .entry-list .data-table .actions .btn--sm {
+    padding: 0 6px;
+    font-size: 11.5px;
+  }
+  .entry-list .data-table .actions .btn + .btn {
+    margin-left: 3px;
+  }
+  .entry-list .select-col {
+    width: 26px;
+  }
+  /* A table wider than the tablet scrolls inside its own box; the page itself never scrolls sideways. */
+  .entry-list .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+@media (min-width: 721px) and (max-width: 1100px) {
+  /* Two-line column headings ("ORIGINAL / AMOUNT") so the money columns can be narrower. */
+  .entry-list .data-table thead th {
+    white-space: normal;
+    line-height: 1.25;
+    vertical-align: bottom;
+  }
+  .entry-list .th-sort {
+    display: inline;
+    white-space: normal;
+    text-align: inherit;
+  }
+  .entry-list .data-table .num .th-sort {
+    text-align: right;
+  }
+}
+/* Portrait tablets: no room for the row buttons. Tapping a row opens the bill, which has them all. */
+@media (min-width: 721px) and (max-width: 900px) {
+  .entry-list .data-table th.actions,
+  .entry-list .data-table td.actions {
+    display: none;
+  }
+  .entry-list .data-table {
+    font-size: 12.5px;
+  }
+  .entry-list .data-table th,
+  .entry-list .data-table td {
+    padding: 8px 5px;
+  }
+}
+@media (min-width: 721px) and (max-width: 900px) {
+  .entry-list .data-table .badge {
+    padding: 2px 6px;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+  }
+  .entry-list .data-table .age {
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+}

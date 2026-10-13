@@ -96,8 +96,9 @@ const SORT_WORDS = {
 };
 const TEXT_SORT_WORDS = { asc: 'A to Z', desc: 'Z to A' };
 
-// Below this width entries are always shown as cards; above it, cards are used only if the table doesn't fit.
-const CARD_BREAKPOINT = 760;
+// Phones (up to this width) show entries as cards. Tablets and wider always show the table (list view);
+// if it is wider than the screen it scrolls sideways inside its own box.
+const CARD_BREAKPOINT = 720;
 
 /** Card version of a table row: who / what / amount / date / age / status at a glance. */
 function selectBox(e, checked) {
@@ -533,14 +534,13 @@ export function mountEntryList(container, config) {
     }
   }
 
-  /** Use the table when it fits; otherwise (phones, narrow tablets, very wide tables) show cards. */
+  /** Cards on phones only; the table (list view) everywhere else. */
   function fitLayout() {
     const panel = $('.entry-list', container);
     if (!panel) return;
     panel.classList.remove('is-cards');
-    const wrap = $('.table-wrap', container);
     const tooNarrow = window.innerWidth <= CARD_BREAKPOINT;
-    if (tooNarrow || (wrap && wrap.scrollWidth > wrap.clientWidth + 1)) panel.classList.add('is-cards');
+    if (tooNarrow) panel.classList.add('is-cards');
   }
 
   const onResize = debounce(() => {
