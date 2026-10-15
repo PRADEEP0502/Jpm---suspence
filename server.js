@@ -121,6 +121,8 @@ function buildApp() {
       roles: permissions.ROLES.map((r) => ({ key: r, label: permissions.ROLE_LABELS[r] })),
       // The header's "Period: ... - ..." starts at the earliest entry this signed-in user may see.
       earliestEntryDate: req.user ? await entries.earliestEntryDate(req.user) : null,
+      // Serverless hosting cannot keep a live connection open; screens then refresh on a timer instead.
+      liveUpdates: !config.SERVERLESS,
     }))
   );
 
@@ -430,6 +432,20 @@ async function main() {
   ['SIGINT', 'SIGTERM', 'SIGBREAK'].forEach((signal) => process.on(signal, () => shutdown(signal)));
 }
 
+/**
+ * One-time setup for serverless hosting (Vercel), where there is no long-running process:
+ * the same steps as main() minus listening, backups and the change-stream watcher.
+ * Runs on the first request of each new instance; api/index.js waits for it.
+ */
+async function prepare() {
+  const info = await db.openDatabase();
+  await users.ensureDefaultAdmin();
+  await settings.ensureDefaults();
+  if (info.isNew && config.SEED_SAMPLE_DATA) await seedSampleData();
+  await db.syncSrnCounter();
+  return info;
+}
+
 if (require.main === module) {
   main().catch((err) => {
     console.error('Failed to start:', err);
@@ -437,4 +453,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildApp };
+module.exports = { buildApp, prepare };

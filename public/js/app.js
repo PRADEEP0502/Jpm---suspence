@@ -18,6 +18,8 @@ import * as settingsPage from './pages/settings.js';
 import * as loginPage from './pages/login.js';
 
 const AUTO_REFRESH_MS = 60 * 1000;
+// Without a live connection (serverless hosting) other people's changes arrive by this timer instead.
+const AUTO_REFRESH_NO_LIVE_MS = 30 * 1000;
 
 /**
  * Every page except the sign-in page needs a signed-in user. `perm` decides who may open it
@@ -248,7 +250,8 @@ function setLiveStatus(status) {
 }
 
 function startLiveUpdates() {
-  if (liveSource || typeof EventSource === 'undefined' || !isLoggedIn() || state.user.mustChangePassword) return;
+  if (liveSource || state.liveUpdates === false || typeof EventSource === 'undefined') return;
+  if (!isLoggedIn() || state.user.mustChangePassword) return;
   const refreshSoon = debounce(() => {
     if (document.visibilityState === 'visible' && !isModalOpen()) refreshCurrent();
   }, 400);
@@ -273,6 +276,7 @@ async function start() {
       defaultParticulars: boot.defaultParticulars,
       roles: boot.roles,
       earliestEntryDate: boot.earliestEntryDate,
+      liveUpdates: boot.liveUpdates !== false,
     });
   } catch (err) {
     setHtml($('#app'), html`<div class="empty empty--error empty--tall">${err.message}</div>`);
@@ -332,7 +336,7 @@ async function start() {
     } catch (_) {
       /* network hiccup; try again next tick */
     }
-  }, AUTO_REFRESH_MS);
+  }, state.liveUpdates === false ? AUTO_REFRESH_NO_LIVE_MS : AUTO_REFRESH_MS);
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && !isModalOpen() && isLoggedIn()) refreshCurrent();

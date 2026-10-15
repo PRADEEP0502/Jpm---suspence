@@ -80,6 +80,17 @@ Open http://localhost:3000.
 
 [render.yaml](render.yaml) describes the Render service. Set `MONGODB_URI` and `MONGODB_DB` in Render and allow Render in the Atlas Network Access list. Render redeploys on every push to `main`. `GET /api/health` is the only public endpoint.
 
+### Vercel
+
+[vercel.json](vercel.json) and [api/index.js](api/index.js) let the same code run on Vercel: the pages are served from Vercel's network (they open instantly) and every `/api` request runs the Express app as a function, which starts in a second or two instead of sleeping like Render's free plan.
+
+1. vercel.com → **Add New → Project** → import the GitHub repository. Framework preset: **Other**; leave build settings as they are (vercel.json sets them).
+2. **Environment Variables**: `MONGODB_URI` (the Atlas connection string), `MONGODB_DB` = `jpm_suspense`, `APP_TIMEZONE` = `Asia/Kolkata`.
+3. **Deploy**. Atlas Network Access must allow `0.0.0.0/0` (already the case for Render).
+4. Optional: Project → Settings → Functions → Function Region: pick the region closest to the Atlas cluster.
+
+Differences on Vercel: screens refresh other people's changes every 30 seconds instead of instantly (Vercel cannot hold the live connection open), and automatic file backups are off (use Settings → Download Backup, or `npm run backup` from an office computer). Vercel's free Hobby plan is for non-commercial use; a company tool should be on Vercel Pro.
+
 ## Notes when upgrading from the earlier public-view version
 
 - The dashboard is no longer public: everyone must sign in.

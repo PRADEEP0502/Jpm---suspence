@@ -33,8 +33,10 @@ loadEnvFile();
 
 const flag = (name, fallback) => String(process.env[name] ?? fallback).toLowerCase() !== 'false';
 
-// Render (and most hosts) put a proxy in front of the app and serve it over HTTPS.
-const ON_HOSTED_PLATFORM = Boolean(process.env.RENDER || process.env.FLY_APP_NAME || process.env.DYNO);
+// Render, Vercel (and most hosts) put a proxy in front of the app and serve it over HTTPS.
+const ON_HOSTED_PLATFORM = Boolean(process.env.RENDER || process.env.VERCEL || process.env.FLY_APP_NAME || process.env.DYNO);
+// Vercel runs the app as short-lived functions: no open live-update connections, no file backups.
+const SERVERLESS = Boolean(process.env.VERCEL);
 
 module.exports = {
   ENV_FILE,
@@ -55,7 +57,8 @@ module.exports = {
   // Behind a proxy the real visitor IP comes from X-Forwarded-For; needed for login rate limiting.
   TRUST_PROXY: process.env.TRUST_PROXY || (ON_HOSTED_PLATFORM ? 1 : 'loopback'),
   ON_HOSTED_PLATFORM,
+  SERVERLESS,
   BACKUP_DIR: path.resolve(process.env.BACKUP_DIR || path.join(__dirname, '..', 'data', 'backups')),
   BACKUP_KEEP_DAYS: Number(process.env.BACKUP_KEEP_DAYS) || 30,
-  AUTO_BACKUP: flag('AUTO_BACKUP', 'true'),
+  AUTO_BACKUP: flag('AUTO_BACKUP', SERVERLESS ? 'false' : 'true'),
 };
