@@ -109,13 +109,17 @@ async function createSession(res, userId) {
 
 async function destroySession(req, res) {
   const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
-  if (token) await db.collections.sessions().deleteOne({ _id: sha256(token) });
+  if (token) {
+    sessionCache.delete(sha256(token));
+    await db.collections.sessions().deleteOne({ _id: sha256(token) });
+  }
   setSessionCookie(res, '', 0);
 }
 
 /** Log a user out everywhere (optionally keeping the session making this request). */
 async function destroyAllSessionsForUser(userId, keepReq) {
   const keep = keepReq ? parseCookies(keepReq.headers.cookie)[COOKIE_NAME] : null;
+  forgetUser(userId); // includes the kept session, so its changed details are re-read
   await db.collections.sessions().deleteMany({
     userId: db.toObjectId(userId),
     _id: { $ne: keep ? sha256(keep) : '' },
@@ -181,26 +185,51 @@ async function changePassword(req, currentPassword, newPassword) {
 
 const RENEW_AFTER_MS = 24 * 3600 * 1000; // extend a sign-in at most once a day
 
+/**
+ * Every request used to make two database trips just to check the login (session, then user).
+ * A checked login is remembered for a few seconds so a page's burst of requests costs one check.
+ * Logout, password changes, role changes and disabling a login clear it at once (forgetUser /
+ * destroySession), so the short memory never lets a removed login through.
+ */
+const SESSION_CACHE_MS = 30 * 1000;
+const sessionCache = new Map(); // sha256(token) -> { session, user, until }
+
+function forgetUser(userId) {
+  const id = String(userId);
+  for (const [key, v] of sessionCache) if (String(v.session.userId) === id) sessionCache.delete(key);
+}
+
+async function lookupSession(tokenHash, now) {
+  const hit = sessionCache.get(tokenHash);
+  if (hit && hit.until > now.getTime() && hit.session.expiresAt > now) return hit;
+  sessionCache.delete(tokenHash);
+  const session = await db.collections.sessions().findOne({ _id: tokenHash, expiresAt: { $gt: now } });
+  if (!session) return null;
+  const user = await db.collections.users().findOne({ _id: session.userId, isActive: true });
+  if (!user) return null;
+  const entry = { session, user, until: now.getTime() + SESSION_CACHE_MS };
+  if (sessionCache.size > 5000) sessionCache.clear();
+  sessionCache.set(tokenHash, entry);
+  return entry;
+}
+
 async function loadUser(req, res, next) {
   req.user = null;
   try {
     const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
     if (token) {
       const now = new Date();
-      const session = await db.collections.sessions().findOne({ _id: sha256(token), expiresAt: { $gt: now } });
-      if (session) {
-        const user = await db.collections.users().findOne({ _id: session.userId, isActive: true });
-        if (user) {
-          req.user = toPublicUser(user);
-          // Keep people who use the app signed in: push the expiry out again, once a day at most.
-          const fullLife = SESSION_HOURS * 3600 * 1000;
-          if (session.expiresAt.getTime() - now.getTime() < fullLife - RENEW_AFTER_MS) {
-            await db.collections.sessions().updateOne(
-              { _id: session._id },
-              { $set: { expiresAt: new Date(now.getTime() + fullLife), renewedAt: now } }
-            );
-            setSessionCookie(res, token, SESSION_HOURS * 3600);
-          }
+      const found = await lookupSession(sha256(token), now);
+      if (found) {
+        const { session, user } = found;
+        req.user = toPublicUser(user);
+        // Keep people who use the app signed in: push the expiry out again, once a day at most.
+        const fullLife = SESSION_HOURS * 3600 * 1000;
+        if (session.expiresAt.getTime() - now.getTime() < fullLife - RENEW_AFTER_MS) {
+          const expiresAt = new Date(now.getTime() + fullLife);
+          await db.collections.sessions().updateOne({ _id: session._id }, { $set: { expiresAt, renewedAt: now } });
+          session.expiresAt = expiresAt;
+          setSessionCookie(res, token, SESSION_HOURS * 3600);
         }
       }
     }
@@ -254,6 +283,7 @@ module.exports = {
   changePassword,
   destroySession,
   destroyAllSessionsForUser,
+  forgetUser,
   loadUser,
   requireLogin,
   requirePermission,

@@ -187,6 +187,7 @@ async function updateUser(id, body, actor) {
   );
   // A new role or a disabled login takes effect at once: the person is signed out everywhere.
   if (!isActive || changes.role) await auth.destroyAllSessionsForUser(doc._id);
+  auth.forgetUser(doc._id); // a renamed login shows its new name on the next request
   if (changes.displayName) await linkEntriesToUser({ _id: doc._id, displayNameLower: displayName.toLowerCase() });
   await audit.logAction({
     action: 'USER_UPDATE',

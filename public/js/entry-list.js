@@ -96,6 +96,20 @@ const SORT_WORDS = {
 };
 const TEXT_SORT_WORDS = { asc: 'A to Z', desc: 'Z to A' };
 
+// Name lists for the Given To / holder pickers change rarely; reuse them for a minute instead of
+// fetching them again on every filter change and live update.
+let lookupsCache = null;
+function cachedLookups() {
+  if (!lookupsCache || Date.now() - lookupsCache.at > 60000) {
+    const promise = api('GET', '/api/lookups').catch((err) => {
+      lookupsCache = null;
+      throw err;
+    });
+    lookupsCache = { at: Date.now(), promise };
+  }
+  return lookupsCache.promise;
+}
+
 // Phones (up to this width) show entries as cards. Tablets and wider always show the table (list view);
 // if it is wider than the screen it scrolls sideways inside its own box.
 const CARD_BREAKPOINT = 720;
@@ -375,7 +389,7 @@ export function mountEntryList(container, config) {
     try {
       const [data, lookups] = await Promise.all([
         api('GET', `/api/entries?${toQuery(query)}`),
-        cfg.noWhomFilter ? Promise.resolve({ persons: [] }) : api('GET', '/api/lookups'),
+        cfg.noWhomFilter ? Promise.resolve({ persons: [] }) : cachedLookups(),
       ]);
       if (seq !== requestSeq) return; // a newer request is on its way
       rows = data.entries;
