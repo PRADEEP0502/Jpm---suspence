@@ -18,8 +18,16 @@ const MAX_AMOUNT_PAISE = 10_000_000_000;
 const AGE_BUCKETS = [
   { key: 'A-3', label: 'A-3', range: '0–4 Days', min: 0, max: 4, level: 'normal', levelLabel: 'A-3' },
   { key: 'A-5', label: 'A-5', range: '5–9 Days', min: 5, max: 9, level: 'attention', levelLabel: 'A-5' },
-  { key: 'A-10', label: 'A-10', range: '10–59 Days', min: 10, max: 59, level: 'warning', levelLabel: 'A-10' },
-  { key: 'A-60+', label: 'A-60+', range: '60 Days and above', min: 60, max: null, level: 'very-critical', levelLabel: 'A-60+' },
+  { key: 'A-10', label: 'A-10', range: '10–29 Days', min: 10, max: 29, level: 'warning', levelLabel: 'A-10' },
+  { key: 'A-30', label: 'A-30', range: '30 Days and above', min: 30, max: null, level: 'very-critical', levelLabel: 'A-30' },
+];
+
+// Holder Summary's Age filter: choosing a category there also takes in the older categories listed here.
+const HOLDER_AGE_FILTERS = [
+  { key: 'A-3', label: 'A-3', range: '0–4 Days', buckets: ['A-3'] },
+  { key: 'A-5', label: 'A-5', range: '5–29 Days', buckets: ['A-5', 'A-10'] },
+  { key: 'A-10', label: 'A-10', range: '10 Days and above', buckets: ['A-10', 'A-30'] },
+  { key: 'A-30', label: 'A-30', range: '30 Days and above', buckets: ['A-30'] },
 ];
 
 const DEFAULT_PARTICULARS = [
@@ -121,6 +129,7 @@ module.exports = {
   TIMEZONE,
   MAX_AMOUNT_PAISE,
   AGE_BUCKETS,
+  HOLDER_AGE_FILTERS,
   DEFAULT_PARTICULARS,
   HttpError,
   todayISO,

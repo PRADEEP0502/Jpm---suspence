@@ -203,6 +203,7 @@ const savedStates = new Map();
  *   columns(status) list of column keys
  *   dateField(status) 'entry' | 'closed'  (which date the date filter applies to)
  *   fixed           filters that are always applied and hidden (e.g. { whom })
+ *   holderAges      Age filter uses the Holder Summary rules (a category plus the older ones it takes in)
  *   actions         show Edit/Close buttons for logged-in staff
  *   headActions     extra buttons in the panel header
  *   onLoaded(data)  callback after each load
@@ -310,7 +311,9 @@ export function mountEntryList(container, config) {
           <label for="${cfg.id}-age">Age</label>
           <select id="${cfg.id}-age" data-f="age">
             <option value="">Any age</option>
-            ${state.ageBuckets.map((b) => html`<option value="${b.key}">${b.label} (${b.range})</option>`)}
+            ${(cfg.holderAges ? state.holderAgeFilters : state.ageBuckets).map(
+              (b) => html`<option value="${b.key}">${b.label} (${b.range})</option>`
+            )}
           </select>
         </div>
         <div class="field">
@@ -379,7 +382,7 @@ export function mountEntryList(container, config) {
       q: st.q,
       whom: cfg.noWhomFilter ? '' : cfg.fixed.whom || st.whom,
       holder: cfg.fixed.holder || (showHolderFilter ? st.holder : ''),
-      age: st.age,
+      [cfg.holderAges ? 'holderAge' : 'age']: st.age,
       dateFrom: st.dateFrom,
       dateTo: st.dateTo,
       dateField: cfg.dateField(st.status),

@@ -4,6 +4,7 @@ export const state = {
   user: null, // { id, username, displayName, role, roleLabel, permissions[], home, mustChangePassword }
   today: null, // YYYY-MM-DD in the office time zone (from the server)
   ageBuckets: [],
+  holderAgeFilters: [],
   defaultParticulars: [],
   roles: [], // [{ key, label }]
   earliestEntryDate: null, // YYYY-MM-DD of this user's oldest visible entry, or null if they have none

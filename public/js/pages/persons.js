@@ -14,12 +14,19 @@ const DETAIL_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'returned',
 const view = { q: '', status: 'ALL', age: '', sort: { key: 'balance', dir: 'desc' } };
 
 /**
- * A holder's figures as shown in the table. With an aging category chosen (e.g. A-10) these are that
- * category's balance / pending count / oldest age only; otherwise the holder's totals.
+ * A holder's figures as shown in the table. With an age filter chosen (e.g. A-10) these cover the
+ * categories that filter takes in (A-10 and A-30); otherwise the holder's totals.
  */
 function figures(h) {
-  const slot = view.age && h.aging ? h.aging[view.age] : null;
-  if (slot) return { balance: slot.amountPaise, pending: slot.count, age: slot.oldestDays };
+  const filter = state.holderAgeFilters.find((f) => f.key === view.age);
+  if (filter && h.aging) {
+    const slots = filter.buckets.map((key) => h.aging[key]);
+    return {
+      balance: slots.reduce((s, x) => s + x.amountPaise, 0),
+      pending: slots.reduce((s, x) => s + x.count, 0),
+      age: Math.max(...slots.map((x) => x.oldestDays ?? 0)),
+    };
+  }
   return { balance: h.balanceAmountPaise, pending: h.pendingCount, age: h.oldestPendingDays };
 }
 
@@ -74,7 +81,7 @@ function renderList(main) {
           </select>
           <select class="holder-filter" data-role="age" aria-label="Age">
             <option value="">All ages</option>
-            ${state.ageBuckets.map((b) => html`<option value="${b.key}">${b.label} (${b.range})</option>`)}
+            ${state.holderAgeFilters.map((b) => html`<option value="${b.key}">${b.label} (${b.range})</option>`)}
           </select>
         </div>
         <div data-role="table"><div class="empty">Loading…</div></div>
@@ -90,12 +97,12 @@ function renderList(main) {
 
   function shown() {
     const term = view.q.trim().toLowerCase();
-    const bucket = state.ageBuckets.find((b) => b.key === view.age);
+    const bucket = state.holderAgeFilters.find((b) => b.key === view.age);
     const rows = holders.filter((h) => {
       if (term && !h.name.toLowerCase().includes(term)) return false;
       if (view.status === 'PENDING' && isClear(h)) return false;
       if (view.status === 'CLEAR' && !isClear(h)) return false;
-      // A category shows everyone who has at least one pending entry in it.
+      // A filter shows everyone who has at least one pending entry in the categories it takes in.
       if (bucket && !figures(h).pending) return false;
       return true;
     });
@@ -153,14 +160,14 @@ function renderList(main) {
       setHtml(box, html`<div class="empty">No holders found.</div>`);
       return;
     }
-    const cat = view.age; // e.g. 'A-10': figures below are for that category only
-    const bucket = state.ageBuckets.find((b) => b.key === cat);
+    const cat = view.age; // e.g. 'A-10': figures below are for that filter's categories only
+    const bucket = state.holderAgeFilters.find((b) => b.key === cat);
     setHtml(
       box,
       html`${cat
           ? html`<div class="category-note">
-              Showing only <strong>${cat}</strong> (${bucket ? bucket.range : ''}): each person's ${cat} balance and
-              pending entries.
+              Showing <strong>${cat}</strong> (${bucket ? bucket.range : ''}): each person's balance and pending entries
+              in this age range.
             </div>`
           : ''}
         <div class="table-wrap">
@@ -280,6 +287,7 @@ function renderDetail(main, name) {
     defaultStatus: 'ALL',
     columns: () => DETAIL_COLUMNS,
     fixed: { holder: name },
+    holderAges: true,
     actions: true,
   });
   // Coming from a category view (e.g. A-10): open this person's entries in that category only.
@@ -298,9 +306,7 @@ function renderDetail(main, name) {
               ['Balance', fmtMoney(h.balanceAmountPaise)],
               ['Pending', h.pendingCount],
               ['Oldest Pending', h.pendingCount ? fmtDays(h.oldestPendingDays) : '—'],
-              ...(view.age && h.aging && h.aging[view.age]
-                ? [[`${view.age} Balance`, fmtMoney(h.aging[view.age].amountPaise)]]
-                : []),
+              ...(view.age ? [[`${view.age} Balance`, fmtMoney(figures(h).balance)]] : []),
             ])
           : html`<div class="empty">No entries are currently held by ${name}.</div>`
       );

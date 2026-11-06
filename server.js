@@ -31,7 +31,7 @@ const events = require('./src/events');
 const reports = require('./src/reports');
 const permissions = require('./src/permissions');
 const { seedSampleData } = require('./src/seed');
-const { HttpError, AGE_BUCKETS, DEFAULT_PARTICULARS, TIMEZONE, todayISO } = require('./src/util');
+const { HttpError, AGE_BUCKETS, HOLDER_AGE_FILTERS, DEFAULT_PARTICULARS, TIMEZONE, todayISO } = require('./src/util');
 
 const startedAt = new Date();
 const { requirePermission, requireLogin } = auth;
@@ -117,6 +117,7 @@ function buildApp() {
       today: todayISO(),
       timezone: TIMEZONE,
       ageBuckets: AGE_BUCKETS,
+      holderAgeFilters: HOLDER_AGE_FILTERS,
       defaultParticulars: DEFAULT_PARTICULARS,
       roles: permissions.ROLES.map((r) => ({ key: r, label: permissions.ROLE_LABELS[r] })),
       // The header's "Period: ... - ..." starts at the earliest entry this signed-in user may see.

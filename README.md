@@ -35,7 +35,9 @@ Records are linked to a login by the **Given To** name: the name on an entry mus
 
 ## Dashboard
 
-Three cards from live database totals: Pending Amount, Partially Settled Amount, Closed Amount (each shows how many entries are behind it). Each card is clickable and opens the exact entries behind that figure. Under them an Aging Summary in the JPM DFR-style categories A-3 (0-4 days), A-5 (5-9), A-10 (10-59) and A-60+ (60 and above), each clickable to list its entries, the pending table, and holder-wise and particulars summaries (Holder Summary groups by who currently holds each entry, not who it was originally given to - see Assign below). Closed entries are in Closed History; All Suspense lists everything with filters.
+Three cards from live database totals: Pending Amount, Partially Settled Amount, Closed Amount (each shows how many entries are behind it). Each card is clickable and opens the exact entries behind that figure. Under them an Aging Summary in the JPM DFR-style categories A-3 (0-4 days), A-5 (5-9), A-10 (10-29) and A-30 (30 and above), each clickable to list its entries, the pending table, and holder-wise and particulars summaries (Holder Summary groups by who currently holds each entry, not who it was originally given to - see Assign below). Closed entries are in Closed History; All Suspense lists everything with filters.
+
+The Age filter on Holder Summary is wider than the categories: A-3 shows A-3 only (0-4 days), A-5 shows A-5 and A-10 (5-29 days), A-10 shows A-10 and A-30 (10 days and above), A-30 shows A-30 only.
 
 ## Reports
 

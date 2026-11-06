@@ -125,7 +125,7 @@ export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
   </div>`;
 }
 
-/** Four aging tiles (A-3, A-5, A-10, A-60+) for pending entries; each is a button that lists its entries. */
+/** Four aging tiles (A-3, A-5, A-10, A-30) for pending entries; each is a button that lists its entries. */
 export function agingTiles(aging) {
   const openTotal = aging.reduce((s, a) => s + a.amountPaise, 0);
   return html`<div class="aging">

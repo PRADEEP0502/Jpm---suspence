@@ -29,6 +29,7 @@ const permissions = require('./permissions');
 const settings = require('./settings');
 const {
   AGE_BUCKETS,
+  HOLDER_AGE_FILTERS,
   DEFAULT_PARTICULARS,
   MAX_AMOUNT_PAISE,
   HttpError,
@@ -244,6 +245,8 @@ async function listEntries(query, user) {
   if (bucket) {
     entries = entries.filter((e) => e.ageDays >= bucket.min && (bucket.max === null || e.ageDays <= bucket.max));
   }
+  const holderAge = HOLDER_AGE_FILTERS.find((f) => f.key === query.holderAge);
+  if (holderAge) entries = entries.filter((e) => holderAge.buckets.includes(e.ageBucket));
 
   const totals = entries.reduce(
     (t, e) => ({
@@ -299,7 +302,7 @@ async function dashboardSummary(user) {
     pendingCount: 0,
     closedCount: 0,
     oldestPendingDays: null,
-    // Pending balance split by aging category (A-3, A-5, A-10, A-60+), same rules as the dashboard tiles.
+    // Pending balance split by aging category (A-3, A-5, A-10, A-30), same rules as the dashboard tiles.
     aging: Object.fromEntries(AGE_BUCKETS.map((b) => [b.key, { count: 0, amountPaise: 0, oldestDays: null }])),
   });
   const holders = new Map();

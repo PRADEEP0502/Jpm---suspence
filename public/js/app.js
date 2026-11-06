@@ -273,6 +273,7 @@ async function start() {
       user: boot.user,
       today: boot.today,
       ageBuckets: boot.ageBuckets,
+      holderAgeFilters: boot.holderAgeFilters,
       defaultParticulars: boot.defaultParticulars,
       roles: boot.roles,
       earliestEntryDate: boot.earliestEntryDate,
