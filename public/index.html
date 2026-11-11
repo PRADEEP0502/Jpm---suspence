@@ -2,10 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>JPM Suspense Amount Dashboard</title>
     <meta name="description" content="Track amounts given out that are pending settlement, and their closing history." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f3a5f'/%3E%3Ctext x='16' y='21' font-family='Segoe UI,Arial' font-size='11' font-weight='700' fill='white' text-anchor='middle'%3EJPM%3C/text%3E%3C/svg%3E" />
+    <link rel="icon" type="image/png" href="icons/favicon.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#f4ead8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="JPM Suspense" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="stylesheet" href="css/app.css" />
     <!-- Fetch every script at once instead of one import after another (each round trip costs time). -->
     <link rel="modulepreload" href="js/app.js" />
@@ -29,11 +36,16 @@
     <link rel="modulepreload" href="js/pages/settings.js" />
   </head>
   <body>
+    <div id="splash" class="splash" aria-hidden="true">
+      <img src="icons/icon-192.png" alt="" width="132" height="132" />
+      <div class="splash-title">JPM Suspense</div>
+      <div class="splash-sub">Junior Processing Mill</div>
+    </div>
     <a class="skip-link" href="#app">Skip to content</a>
     <header class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="#/dashboard">
-          <span class="brand-mark" aria-hidden="true">JPM</span>
+          <img class="brand-logo" src="icons/logo.png" alt="Junior Processing Mill" width="44" height="44" />
           <span class="brand-text">
             <span class="brand-title">JPM Suspense Amount Dashboard</span>
             <span class="brand-sub"><span id="asOf"></span> <span id="liveStatus" class="live-chip"></span></span>
@@ -51,5 +63,6 @@
     <div id="toastRoot" class="toasts" aria-live="polite"></div>
     <noscript><p class="container">This application needs JavaScript enabled in the browser.</p></noscript>
     <script type="module" src="js/app.js"></script>
+    <script src="js/pwa.js"></script>
   </body>
 </html>
