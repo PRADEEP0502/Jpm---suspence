@@ -1,8 +1,8 @@
 'use strict';
 // Minimal service worker: lets the app be installed and opens the shell fast.
 // Data (/api) always goes to the network so figures are never stale.
-const CACHE = 'jpm-shell-v1';
-const SHELL = ['./', 'css/app.css', 'icons/logo.png', 'icons/icon-192.png'];
+const CACHE = 'jpm-shell-v2';
+const SHELL = ['./', 'css/app.css', 'icons/logo.png', 'icons/icon-192.png', 'icons/app-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -39,7 +39,6 @@ export function render(main) {
         <div class="panel-head">
           <div>
             <h2 class="panel-title">Aging Summary</h2>
-            <div class="panel-sub">Pending balance by aging category. Each category includes all older bills (A-3 = everything, A-5 = A-5 and older, A-10 = A-10 and older, A-30 = A-30). Click one to list its entries.</div>
           </div>
         </div>
         <div class="panel-body" data-role="aging"></div>

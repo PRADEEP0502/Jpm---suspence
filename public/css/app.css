@@ -2808,8 +2808,8 @@ textarea {
   transition: opacity 0.45s ease;
 }
 .splash img {
-  border-radius: 50%;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  border-radius: 28%;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
   animation: splash-pop 0.7s ease both;
 }
 .splash-title {
