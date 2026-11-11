@@ -17,6 +17,7 @@
 const os = require('os');
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 
 const pkg = require('./package.json');
 const config = require('./src/config');
@@ -78,6 +79,14 @@ function buildApp() {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.TRUST_PROXY);
+
+  // Gzip pages, scripts and JSON (about 4x smaller on the wire). The live-update stream is left
+  // alone: compressing it would hold events back in a buffer.
+  app.use(
+    compression({
+      filter: (req, res) => !String(res.getHeader('Content-Type') || '').includes('text/event-stream') && compression.filter(req, res),
+    })
+  );
 
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -340,8 +349,9 @@ function buildApp() {
     express.static(path.join(__dirname, 'public'), {
       index: 'index.html',
       setHeaders(res, filePath) {
-        // Always pick up new versions of the app after an update.
-        res.setHeader('Cache-Control', 'no-cache');
+        // Code and pages: always check for a newer version after an update (a cheap 304 when unchanged).
+        // Images rarely change, so the browser keeps them for a day without asking again.
+        res.setHeader('Cache-Control', /\.(png|jpe?g|svg|ico|webp)$/i.test(filePath) ? 'public, max-age=86400' : 'no-cache');
         if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
       },
     })

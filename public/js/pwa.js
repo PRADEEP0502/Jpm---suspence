@@ -7,8 +7,8 @@ window.addEventListener('load', () => {
   else if (splash) {
     setTimeout(() => {
       splash.classList.add('is-done');
-      setTimeout(() => splash.remove(), 500);
-    }, 900);
+      setTimeout(() => splash.remove(), 400);
+    }, 250);
   }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
