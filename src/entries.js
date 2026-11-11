@@ -243,7 +243,7 @@ async function listEntries(query, user) {
 
   const bucket = AGE_BUCKETS.find((b) => b.key === query.age);
   if (bucket) {
-    entries = entries.filter((e) => e.ageDays >= bucket.min && (bucket.max === null || e.ageDays <= bucket.max));
+    entries = entries.filter((e) => e.ageDays >= bucket.min); // cumulative: A-5 includes A-10, A-30 too
   }
   const holderAge = HOLDER_AGE_FILTERS.find((f) => f.key === query.holderAge);
   if (holderAge) entries = entries.filter((e) => holderAge.buckets.includes(e.ageBucket));

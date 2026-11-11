@@ -126,10 +126,16 @@ export function groupTable(rows, { kind, limit = 0, rowAttrs = null }) {
 }
 
 /** Four aging tiles (A-3, A-5, A-10, A-30) for pending entries; each is a button that lists its entries. */
-export function agingTiles(aging) {
-  const openTotal = aging.reduce((s, a) => s + a.amountPaise, 0);
+export function agingTiles(exactAging) {
+  const openTotal = exactAging.reduce((s, a) => s + a.amountPaise, 0);
+  // Cumulative: A-3 takes in A-5, A-10 and A-30 too; A-5 takes A-10 and A-30; and so on (same as the list it opens).
+  const aging = exactAging.map((a, i) => ({
+    ...a,
+    count: exactAging.slice(i).reduce((s, x) => s + x.count, 0),
+    amountPaise: exactAging.slice(i).reduce((s, x) => s + x.amountPaise, 0),
+  }));
   return html`<div class="aging">
-    ${aging.map((a) => {
+    ${aging.map((a, i) => {
       const exact = openTotal ? (a.amountPaise / openTotal) * 100 : 0;
       const pct = Math.round(exact);
       const pctLabel = a.amountPaise && pct === 0 ? '<1' : String(pct);
@@ -137,11 +143,11 @@ export function agingTiles(aging) {
         type="button"
         class="aging-tile aging-tile--${a.level} ${a.count ? '' : 'is-empty'}"
         data-age="${a.key}"
-        title="Show pending entries in ${a.label} (${a.range})"
+        title="Show pending entries in ${a.label} and older categories"
       >
         <span class="aging-head">
           <span class="aging-range">${a.label}</span>
-          <span class="level">${a.range}</span>
+          <span class="level">${i === 0 ? 'All pending' : i === aging.length - 1 ? a.range : a.label + ' & above'}</span>
         </span>
         <span class="aging-amount">${fmtMoney(a.amountPaise)}</span>
         <span class="meter" aria-hidden="true"><span style="width:${a.amountPaise ? Math.max(exact, 1) : 0}%"></span></span>
