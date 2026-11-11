@@ -2899,3 +2899,10 @@ textarea {
 .cards--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+
+/* Splash screen only on phones; desktop opens straight to the page. */
+@media (min-width: 721px) {
+  .splash {
+    display: none !important;
+  }
+}
