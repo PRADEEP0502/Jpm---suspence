@@ -42,17 +42,15 @@ function card(label, value, meta, modifier = '', kpi = null) {
 const entriesWord = (n) => plural(n, 'entry', 'entries');
 
 /**
- * The three figures management reads first. Everything comes from the database.
+ * The two figures management reads first (closed totals are on Closed History). Everything comes from the database.
  *   Pending Amount               balance of entries with nothing returned yet
  *   Partially Settled Amount     balance still pending on part-returned entries
- *   Closed Amount                what was given in entries that are now fully returned
  * Card captions stay short and plain (e.g. "34 Pending") so office staff read them at a glance.
  */
 export function summaryCards(c) {
-  return html`<div class="cards" data-role="kpi-cards">
+  return html`<div class="cards cards--two" data-role="kpi-cards">
     ${card('Pending Amount', fmtMoney(c.openAmountPaise), `${c.openCount} Pending`, 'open', 'OPEN')}
     ${card('Partially Settled Amount', fmtMoney(c.partialAmountPaise), `${c.partialCount} Pending`, 'partial', 'PARTIAL')}
-    ${card('Closed Amount', fmtMoney(c.closedAmountPaise), `${c.closedCount} Closed`, 'closed', 'CLOSED')}
   </div>`;
 }
 

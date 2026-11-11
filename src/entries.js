@@ -246,7 +246,7 @@ async function listEntries(query, user) {
     entries = entries.filter((e) => e.ageDays >= bucket.min); // cumulative: A-5 includes A-10, A-30 too
   }
   const holderAge = HOLDER_AGE_FILTERS.find((f) => f.key === query.holderAge);
-  if (holderAge) entries = entries.filter((e) => holderAge.buckets.includes(e.ageBucket));
+  if (holderAge) entries = entries.filter((e) => e.status !== 'CLOSED' && e.ageDays >= holderAge.minDays);
 
   const totals = entries.reduce(
     (t, e) => ({
@@ -304,6 +304,8 @@ async function dashboardSummary(user) {
     oldestPendingDays: null,
     // Pending balance split by aging category (A-3, A-5, A-10, A-30), same rules as the dashboard tiles.
     aging: Object.fromEntries(AGE_BUCKETS.map((b) => [b.key, { count: 0, amountPaise: 0, oldestDays: null }])),
+    // Holder Summary's Age filters (A-3 = pending 3+ days, A-5 = 5+, ...): cumulative, so they overlap.
+    holderAging: Object.fromEntries(HOLDER_AGE_FILTERS.map((f) => [f.key, { count: 0, amountPaise: 0, oldestDays: null }])),
   });
   const holders = new Map();
   const particulars = new Map();
@@ -352,6 +354,13 @@ async function dashboardSummary(user) {
         slot.count += 1;
         slot.amountPaise += e.balancePaise;
         slot.oldestDays = Math.max(slot.oldestDays ?? 0, e.ageDays);
+        for (const f of HOLDER_AGE_FILTERS) {
+          if (e.ageDays < f.minDays) continue;
+          const h = g.holderAging[f.key];
+          h.count += 1;
+          h.amountPaise += e.balancePaise;
+          h.oldestDays = Math.max(h.oldestDays ?? 0, e.ageDays);
+        }
       } else {
         g.closedCount += 1;
       }

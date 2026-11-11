@@ -14,18 +14,14 @@ const DETAIL_COLUMNS = ['srn', 'entryDate', 'particulars', 'amount', 'returned',
 const view = { q: '', status: 'ALL', age: '', sort: { key: 'balance', dir: 'desc' } };
 
 /**
- * A holder's figures as shown in the table. With an age filter chosen (e.g. A-10) these cover the
- * categories that filter takes in (A-10 and A-30); otherwise the holder's totals.
+ * A holder's figures as shown in the table. With an age filter chosen (e.g. A-10) these cover every
+ * pending entry aged that many days or more; otherwise the holder's totals.
  */
 function figures(h) {
   const filter = state.holderAgeFilters.find((f) => f.key === view.age);
-  if (filter && h.aging) {
-    const slots = filter.buckets.map((key) => h.aging[key]);
-    return {
-      balance: slots.reduce((s, x) => s + x.amountPaise, 0),
-      pending: slots.reduce((s, x) => s + x.count, 0),
-      age: Math.max(...slots.map((x) => x.oldestDays ?? 0)),
-    };
+  if (filter && h.holderAging) {
+    const slot = h.holderAging[filter.key]; // pending entries aged filter.minDays days or more
+    return { balance: slot.amountPaise, pending: slot.count, age: slot.oldestDays ?? 0 };
   }
   return { balance: h.balanceAmountPaise, pending: h.pendingCount, age: h.oldestPendingDays };
 }

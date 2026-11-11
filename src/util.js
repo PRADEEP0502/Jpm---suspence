@@ -22,12 +22,13 @@ const AGE_BUCKETS = [
   { key: 'A-30', label: 'A-30', range: '30 Days and above', min: 30, max: null, level: 'very-critical', levelLabel: 'A-30' },
 ];
 
-// Holder Summary's Age filter: choosing a category there also takes in the older categories listed here.
+// Holder Summary's Age filter: each one is independent and cumulative by pending days, so an entry
+// pending 12 days shows under A-3, A-5 and A-10. Only pending (not closed) entries are counted.
 const HOLDER_AGE_FILTERS = [
-  { key: 'A-3', label: 'A-3', range: '0–4 Days', buckets: ['A-3'] },
-  { key: 'A-5', label: 'A-5', range: '5–29 Days', buckets: ['A-5', 'A-10'] },
-  { key: 'A-10', label: 'A-10', range: '10 Days and above', buckets: ['A-10', 'A-30'] },
-  { key: 'A-30', label: 'A-30', range: '30 Days and above', buckets: ['A-30'] },
+  { key: 'A-3', label: 'A-3', range: 'Above 3 Days', minDays: 3 },
+  { key: 'A-5', label: 'A-5', range: 'Above 5 Days', minDays: 5 },
+  { key: 'A-10', label: 'A-10', range: 'Above 10 Days', minDays: 10 },
+  { key: 'A-30', label: 'A-30', range: 'Above 30 Days', minDays: 30 },
 ];
 
 const DEFAULT_PARTICULARS = [
